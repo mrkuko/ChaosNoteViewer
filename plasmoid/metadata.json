@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "emanuelcisar@gmail.com",
+                "Name": "mrkuko"
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "View notes from your panel or desktop",
+        "EnabledByDefault": true,
+        "Icon": "view-pim-notes",
+        "Id": "org.kde.plasma.chaosnoteviewer",
+        "License": "GPL-3.0+",
+        "Name": "Chaos Note Viewer",
+        "Version": "0.1"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
