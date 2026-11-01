@@ -7,7 +7,7 @@ import org.kde.kirigami as Kirigami
 PlasmoidItem {
     id: root
 
-    Plasmoid.icon: "view-pim-notes"
+    Plasmoid.icon: "chaosnoteviewer"
     toolTipMainText: i18n("Chaos Note Viewer")
 
     // 0 = Uncompleted (default), 1 = Completed, 2 = All
@@ -48,7 +48,7 @@ PlasmoidItem {
 
         Kirigami.Icon {
             anchors.fill: parent
-            source: "view-pim-notes"
+            source: "chaosnoteviewer"
             active: compact.containsMouse
         }
     }

@@ -10,7 +10,7 @@
         "Category": "Utilities",
         "Description": "View notes from your panel or desktop",
         "EnabledByDefault": true,
-        "Icon": "view-pim-notes",
+        "Icon": "chaosnoteviewer",
         "Id": "org.kde.plasma.chaosnoteviewer",
         "License": "GPL-3.0+",
         "Name": "Chaos Note Viewer",
