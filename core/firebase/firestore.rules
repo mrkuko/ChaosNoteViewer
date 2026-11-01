@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // Every user touches only their own subtree.
+    match /users/{uid} {
+
+      match /notes/{noteId} {
+        allow read: if isOwner(uid);
+        // Notes are soft-deleted (tombstones), never physically removed.
+        allow create, update: if isOwner(uid)
+          && request.resource.data.serverUpdatedAt == request.time  // pull cursor must be server time
+          && request.resource.data.content is string
+          && request.resource.data.content.size() < 200000;
+        allow delete: if false;
+      }
+
+      // wrapped data key, written by the encryption part
+      match /meta/{doc} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
