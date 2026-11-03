@@ -1,0 +1,81 @@
+name: Cascade main into platform branches
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: cascade
+  cancel-in-progress: false
+
+jobs:
+  cascade:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [desktop, android]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - name: Check out the platform branch
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.platform }}
+          fetch-depth: 0
+        continue-on-error: true
+
+      - name: Skip when the branch does not exist yet
+        if: steps.checkout.outcome != 'success'
+        run: echo "::notice::Branch '$PLATFORM' does not exist yet, nothing to cascade."
+
+      - name: Merge main
+        if: steps.checkout.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "$PLATFORM already contains main."
+            exit 0
+          fi
+
+          if git merge origin/main --no-edit; then
+            git push origin "HEAD:$PLATFORM"
+            exit 0
+          fi
+
+          # Conflicts confined to ./<platform>/ (stub vs. real README) are resolved
+          # in the platform branch's favour; anything else needs a human.
+          outside=$(git diff --name-only --diff-filter=U | grep -v "^$PLATFORM/" || true)
+          if [ -z "$outside" ]; then
+            git checkout --ours -- "$PLATFORM/"
+            git add "$PLATFORM/"
+            git commit --no-edit
+            git push origin "HEAD:$PLATFORM"
+            exit 0
+          fi
+
+          echo "Conflicts outside $PLATFORM/:"
+          echo "$outside"
+          git merge --abort
+
+          title="Cascade main into $PLATFORM has conflicts"
+          body=$(printf 'Merging `main` into `%s` conflicted outside `%s/`. Resolve it by hand in the PR.\n\nConflicting files:\n```\n%s\n```\n' "$PLATFORM" "$PLATFORM" "$outside")
+
+          if [ -z "$(gh pr list --base "$PLATFORM" --head main --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base "$PLATFORM" --head main --title "$title" --body "$body"
+          fi
+          if [ -z "$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[].number')" ]; then
+            gh issue create --title "$title" --body "$body"
+          fi
+          exit 1
