@@ -1,3 +1,5 @@
 *.plasmoid
 garbage/*
 build/
+node_modules/
+*-debug.log
