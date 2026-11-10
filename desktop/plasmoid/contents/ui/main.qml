@@ -30,7 +30,7 @@ PlasmoidItem {
         for (let i = 0; i < notes.count; ++i) {
             const n = notes.get(i)
             if (filter === 2 || (filter === 0) === !n.completed)
-                shown.append({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed, dueDate: n.dueDate })
+                shown.append({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed, dueDate: n.dueDate, position: n.position })
         }
     }
 
@@ -67,12 +67,48 @@ PlasmoidItem {
         refresh()
     }
 
-    onFilterChanged: refresh()
-    Component.onCompleted: {
+    function reload() {
+        notes.clear()
         for (const n of NoteStore.all())
             notes.append(n)
         refresh()
     }
+
+    // Applies a drag: the note shown at row `from` is dropped at row `to` of the shown list.
+    function dropNote(from, to) {
+        const visible = []
+        for (let i = 0; i < shown.count; ++i)
+            visible.push(shown.get(i).position)
+
+        let pos = NoteStore.dropPosition(visible, from, to)
+        if (pos !== null && isNaN(pos)) {
+            NoteStore.renumber()
+            reload()
+            for (let i = 0; i < shown.count; ++i)
+                visible[i] = shown.get(i).position
+            pos = NoteStore.dropPosition(visible, from, to)
+        }
+        if (pos === null || isNaN(pos))
+            return
+
+        const noteId = shown.get(from).noteId
+        NoteStore.setPosition(noteId, pos)
+
+        // keep both models in order without rebuilding them
+        const notesFrom = indexOfNote(noteId)
+        notes.setProperty(notesFrom, "position", pos)
+        let notesTo = 0
+        for (let i = 0; i < notes.count; ++i)
+            if (i !== notesFrom && notes.get(i).position < pos)
+                ++notesTo
+        notes.move(notesFrom, notesTo, 1)
+
+        shown.setProperty(from, "position", pos)
+        shown.move(from, to, 1)
+    }
+
+    onFilterChanged: refresh()
+    Component.onCompleted: reload()
 
     compactRepresentation: MouseArea {
         id: compact
@@ -185,6 +221,31 @@ PlasmoidItem {
                     rightMargin: Kirigami.Units.smallSpacing
                     model: shown
 
+
+                    // Drag to reorder. While a card is dragged the other cards only slide out of its way
+                    // (slot.shift); the models change once, when it is dropped.
+                    property int dragFrom: -1       // row being dragged, -1 = none
+                    property int dragTo: -1         // row it would land on if dropped now
+                    property real dragHeight: 0     // space the dragged card takes, incl. spacing
+                    property bool settling: false   // true while a drop is applied: cards jump instead of sliding
+                    cacheBuffer: Kirigami.Units.gridUnit * 200   // keep every card alive so the drop row can be measured
+
+                    // Row the dragged card would take, from where its centre is among the other cards.
+                    function dropRow(slot, card) {
+                        const centre = slot.y + card.y + card.height / 2
+                        let row = 0
+                        for (let i = 0; i < count; ++i) {
+                            if (i === dragFrom)
+                                continue
+                            const other = itemAtIndex(i)
+                            if (!other)
+                                row += i < dragFrom ? 1 : 0
+                            else if (other.y + other.height / 2 < centre)
+                                ++row
+                        }
+                        return row
+                    }
+
                     PlasmaComponents3.Label {
                         anchors.centerIn: parent
                         visible: list.count === 0
@@ -193,81 +254,135 @@ PlasmoidItem {
                         text: notes.count === 0 ? i18n("No notes yet.\nPress + to add one.") : i18n("Nothing here")
                     }
 
-                    delegate: Rectangle {
-                        id: card
+                    delegate: Item {
+                        id: slot
                         width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
-                        height: row.implicitHeight + Kirigami.Units.largeSpacing * 2
-                        radius: Kirigami.Units.cornerRadius
-                        color: hover.hovered
-                            ? Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
-                            : Qt.alpha(Kirigami.Theme.textColor, 0.06)
-                        opacity: model.completed ? 0.55 : 1.0
+                        height: card.height
+                        z: drag.active ? 10 : 1
 
-                        Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
-                        HoverHandler { id: hover }
+                        // how far this card slides while another one is dragged past it
+                        property real shift: {
+                            const from = list.dragFrom, to = list.dragTo
+                            if (from < 0 || index === from)
+                                return 0
+                            if (from < to && index > from && index <= to)
+                                return -list.dragHeight
+                            if (from > to && index >= to && index < from)
+                                return list.dragHeight
+                            return 0
+                        }
+                        Behavior on shift {
+                            enabled: !list.settling
+                            NumberAnimation { duration: Kirigami.Units.shortDuration }
+                        }
 
-                        RowLayout {
-                            id: row
-                            anchors.fill: parent
-                            anchors.margins: Kirigami.Units.largeSpacing
-                            spacing: Kirigami.Units.largeSpacing
+                        Rectangle {
+                            id: card
+                            width: slot.width
+                            height: row.implicitHeight + Kirigami.Units.largeSpacing * 2
+                            transform: Translate { y: slot.shift }
+                            radius: Kirigami.Units.cornerRadius
+                            color: hover.hovered
+                                ? Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
+                                : Qt.alpha(Kirigami.Theme.textColor, 0.06)
+                            opacity: model.completed ? 0.55 : 1.0
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
+                            Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
+                            HoverHandler { id: hover }
 
-                                PlasmaComponents3.Label {
+                            RowLayout {
+                                id: row
+                                anchors.fill: parent
+                                anchors.margins: Kirigami.Units.largeSpacing
+                                spacing: Kirigami.Units.largeSpacing
+
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    text: model.title
-                                    font.bold: true
-                                    font.strikeout: model.completed
-                                    elide: Text.ElideRight
-                                }
-                                PlasmaComponents3.Label {
-                                    Layout.fillWidth: true
-                                    visible: text !== ""
-                                    text: model.description
-                                    maximumLineCount: 1
-                                    elide: Text.ElideRight
-                                    opacity: 0.7
-                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                }
-                                RowLayout {
-                                    visible: model.dueDate > 0
-                                    spacing: Kirigami.Units.smallSpacing
+                                    spacing: 2
 
-                                    // overdue = deadline day is before today and the note is still open
-                                    readonly property bool overdue: !model.completed && model.dueDate < root.startOfToday()
-
-                                    Kirigami.Icon {
-                                        source: "view-calendar"
-                                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                        color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                                    PlasmaComponents3.Label {
+                                        Layout.fillWidth: true
+                                        text: model.title
+                                        font.bold: true
+                                        font.strikeout: model.completed
+                                        elide: Text.ElideRight
                                     }
                                     PlasmaComponents3.Label {
-                                        text: new Date(model.dueDate).toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+                                        Layout.fillWidth: true
+                                        visible: text !== ""
+                                        text: model.description
+                                        maximumLineCount: 1
+                                        elide: Text.ElideRight
+                                        opacity: 0.7
                                         font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-                                        opacity: parent.overdue ? 1 : 0.7
                                     }
+                                    RowLayout {
+                                        visible: model.dueDate > 0
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        // overdue = deadline day is before today and the note is still open
+                                        readonly property bool overdue: !model.completed && model.dueDate < root.startOfToday()
+
+                                        Kirigami.Icon {
+                                            source: "view-calendar"
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                            color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                                        }
+                                        PlasmaComponents3.Label {
+                                            text: new Date(model.dueDate).toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+                                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                            color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                                            opacity: parent.overdue ? 1 : 0.7
+                                        }
+                                    }
+                                }
+
+                                // Always occupies its space so the card doesn't jump when it appears.
+                                PlasmaComponents3.ToolButton {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    icon.name: "edit-delete"
+                                    opacity: hover.hovered ? 1 : 0
+                                    enabled: hover.hovered
+                                    onClicked: root.removeNote(model.noteId)
+                                    PlasmaComponents3.ToolTip { text: i18n("Delete") }
+                                }
+
+                                PlasmaComponents3.CheckBox {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    checked: model.completed
+                                    onToggled: root.setCompleted(model.noteId, checked)
                                 }
                             }
 
-                            // Always occupies its space so the card doesn't jump when it appears.
-                            PlasmaComponents3.ToolButton {
-                                Layout.alignment: Qt.AlignVCenter
-                                icon.name: "edit-delete"
-                                opacity: hover.hovered ? 1 : 0
-                                enabled: hover.hovered
-                                onClicked: root.removeNote(model.noteId)
-                                PlasmaComponents3.ToolTip { text: i18n("Delete") }
+                            onYChanged: {
+                                if (drag.active)
+                                    list.dragTo = list.dropRow(slot, card)
                             }
 
-                            PlasmaComponents3.CheckBox {
-                                Layout.alignment: Qt.AlignVCenter
-                                checked: model.completed
-                                onToggled: root.setCompleted(model.noteId, checked)
+                            DragHandler {
+                                id: drag
+                                target: card
+                                xAxis.enabled: false
+                                // may overhang the first/last card by half a row, so the ends can be reached
+                                yAxis.minimum: -slot.y - card.height / 2
+                                yAxis.maximum: list.contentHeight - slot.y - card.height / 2
+                                onActiveChanged: {
+                                    const view = list
+                                    if (active) {
+                                        view.dragHeight = card.height + view.spacing
+                                        view.dragFrom = index
+                                        view.dragTo = index
+                                    } else {
+                                        const from = view.dragFrom, to = view.dragTo
+                                        view.settling = true
+                                        view.dragFrom = -1
+                                        view.dragTo = -1
+                                        root.dropNote(from, to)
+                                        card.y = 0
+                                        view.settling = false
+                                    }
+                                }
                             }
                         }
                     }

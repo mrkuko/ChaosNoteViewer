@@ -109,3 +109,42 @@ function setCompleted(noteId, completed) {
             [completed ? 1 : 0, Date.now(), noteId])
     })
 }
+
+// ---- Priority queue ----
+// Order is `position` ascending (lower = higher priority). A move only writes the moved note.
+
+var MIN_GAP = 1e-9
+
+// New position for the note that was shown at row `from` and is dropped at row `to` (its row after the
+// move) in a list whose notes have the positions `visible`. Returns null when nothing changes, NaN when
+// the neighbours are too close together (call renumber() and try again).
+function dropPosition(visible, from, to) {
+    if (from === to)
+        return null
+    var others = visible.slice(0, from).concat(visible.slice(from + 1))
+    if (to <= 0)
+        return others[0] - 1
+    if (to >= others.length)
+        return others[others.length - 1] + 1
+    if (others[to] - others[to - 1] < MIN_GAP)
+        return NaN
+    return (others[to - 1] + others[to]) / 2
+}
+
+function setPosition(noteId, position) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET position = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            [position, Date.now(), noteId])
+    })
+}
+
+// Renumbers live notes 1, 2, 3, ... keeping their order (when neighbours got too close).
+function renumber() {
+    var now = Date.now()
+    db().transaction(function (tx) {
+        var rs = tx.executeSql("SELECT id FROM notes WHERE deleted_at IS NULL ORDER BY position ASC, id ASC")
+        for (var i = 0; i < rs.rows.length; ++i)
+            tx.executeSql("UPDATE notes SET position = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+                [i + 1, now, rs.rows.item(i).id])
+    })
+}
