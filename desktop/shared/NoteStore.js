@@ -64,7 +64,8 @@ function _row(r) {
         description: r.description,
         completed: r.completed === 1,
         position: r.position,
-        dueDate: r.due_date === null ? 0 : r.due_date   // 0 = no deadline
+        dueDate: r.due_date === null ? 0 : r.due_date,  // 0 = no deadline
+        createdAt: r.created_at
     }
 }
 
@@ -90,7 +91,7 @@ function add(title, description, dueDate) {
         var pos = tx.executeSql("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM notes WHERE deleted_at IS NULL").rows.item(0).p
         tx.executeSql("INSERT INTO notes (id, title, description, completed, position, due_date, created_at, updated_at, dirty) "
             + "VALUES (?, ?, ?, 0, ?, ?, ?, ?, 1)", [id, title, description, pos, dueDate > 0 ? dueDate : null, now, now])
-        note = { noteId: id, title: title, description: description, completed: false, position: pos, dueDate: dueDate }
+        note = { noteId: id, title: title, description: description, completed: false, position: pos, dueDate: dueDate, createdAt: now }
     })
     return note
 }

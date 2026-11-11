@@ -38,8 +38,33 @@ Item {
     // false when this build has no Firebase API key, then there is nothing to sign in to
     readonly property bool configured: FirebaseConfig.configured
 
-    // 0 = Uncompleted (default), 1 = Completed, 2 = All
+    // Which notes the list shows: 0 = open (default), 1 = completed, 2 = all,
+    // 3 = important (open and overdue or due within IMPORTANT_DAYS days, today included).
     property int filter: 0
+    readonly property int importantDays: 3
+    // Order of the list. sortField: 0 = your own order (drag to reorder), 1 = name, 2 = deadline,
+    // 3 = date created. sortDesc flips the direction (name A-Z / Z-A, deadline closest / furthest first,
+    // created oldest / newest first). Any field but 0 is a forced order: dragging is off while it is on.
+    // Both are kept on this device (sync_state sort_field, sort_desc), not synced.
+    property int sortField: 0
+    property bool sortDesc: false
+    readonly property bool sorted: sortField !== 0
+    readonly property var sortFieldNames: ["Your order", "Name", "Deadline", "Date created"]
+    // the two directions of each field, [ascending, descending]; index 0 has none
+    readonly property var sortDirectionNames: [["", ""], ["A–Z", "Z–A"], ["Closest first", "Furthest first"], ["Oldest first", "Newest first"]]
+    // icons of the two directions, same order as sortDirectionNames (icons/<name>.png)
+    readonly property var sortDirectionIcons: [["", ""], ["sort-az", "sort-za"], ["sort-up", "sort-down"], ["sort-up", "sort-down"]]
+    readonly property string sortText: sorted ? sortFieldNames[sortField] + ": " + sortDirectionNames[sortField][sortDesc ? 1 : 0] : sortFieldNames[0]
+
+    // choosing a field starts with its natural direction: A-Z, closest first, newest first
+    function setSortField(field) {
+        setSort(field, field === 3)
+    }
+
+    function setSort(field, desc) {
+        sortDesc = desc
+        sortField = field
+    }
     // The app is local-first and works without an account; signing in is only needed to sync.
     property string userEmail: ""      // "" = not signed in
     property string idToken: ""        // Firebase id token (valid for an hour), kept in memory only
@@ -75,14 +100,50 @@ Item {
     ListModel { id: shownModel }
     property alias shown: shownModel
 
+    function matches(n) {
+        if (filter === 1)
+            return n.completed
+        if (filter === 2)
+            return true
+        if (filter === 3)
+            return !n.completed && n.dueDate > 0 && n.dueDate < startOfToday() + importantDays * 86400000
+        return !n.completed
+    }
+
+    // notes without a deadline go last in both deadline directions; ties keep your own order
+    function compare(a, b) {
+        const dir = sortDesc ? -1 : 1
+        let d = 0
+        if (sortField === 1) {
+            d = a.title.localeCompare(b.title) * dir
+        } else if (sortField === 2) {
+            if (a.dueDate > 0 && b.dueDate > 0)
+                d = (a.dueDate - b.dueDate) * dir
+            else if (a.dueDate > 0)
+                d = -1
+            else if (b.dueDate > 0)
+                d = 1
+        } else if (sortField === 3) {
+            d = (a.createdAt - b.createdAt) * dir
+        }
+        return d !== 0 ? d : a.position - b.position
+    }
+
     function refresh() {
-        shown.clear()
+        const rows = []
         for (let i = 0; i < notes.count; ++i) {
             const n = notes.get(i)
-            if (filter === 2 || (filter === 0) === !n.completed)
-                shown.append({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed, dueDate: n.dueDate, position: n.position,
-                              missing: missingIds[n.noteId] === true })
+            if (matches(n))
+                rows.push({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed,
+                            dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
+                            missing: missingIds[n.noteId] === true })
         }
+        // not `sorted`: this also runs from the change handler of sortField, before that flag has updated
+        if (sortField !== 0)
+            rows.sort(compare)
+        shown.clear()
+        for (const r of rows)
+            shown.append(r)
     }
 
     function startOfToday() {
@@ -163,6 +224,14 @@ Item {
     }
 
     onFilterChanged: refresh()
+    onSortFieldChanged: {
+        NoteStore.setState("sort_field", String(sortField))
+        refresh()
+    }
+    onSortDescChanged: {
+        NoteStore.setState("sort_desc", sortDesc ? "1" : "0")
+        refresh()
+    }
     // ---- Account (Firebase Authentication, see Auth.js) ----
     // An account counts only once its email is verified. The real check is on the server: the Firestore
     // rules require email_verified in the signed token, so an unverified account can't reach any data
@@ -559,6 +628,11 @@ Item {
     }
 
     Component.onCompleted: {
+        const savedField = parseInt(NoteStore.getState("sort_field"), 10)
+        if (savedField >= 0 && savedField < sortFieldNames.length) {
+            sortDesc = NoteStore.getState("sort_desc") === "1"
+            sortField = savedField
+        }
         reload()
         restoreSession()
     }
