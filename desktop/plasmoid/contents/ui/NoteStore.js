@@ -95,10 +95,12 @@ function add(title, description, dueDate) {
     return note
 }
 
-// Soft delete: the tombstone is needed so sync can propagate the deletion.
+// A note that was never on the server is just removed. One that was is hidden and queued: the sync
+// deletes it on the server and only then removes the row (purge). There are no tombstones in the cloud.
 function remove(noteId) {
     var now = Date.now()
     db().transaction(function (tx) {
+        tx.executeSql("DELETE FROM notes WHERE id = ? AND remote_updated_at IS NULL", [noteId])
         tx.executeSql("UPDATE notes SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?", [now, now, noteId])
     })
 }
@@ -229,7 +231,7 @@ function applyRemote(items, uid) {
                     tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, position, due_date, "
                         + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
                         [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
-                         n.createdAt, n.updatedAt, n.deletedAt, it.tsMs])
+                         n.createdAt, n.updatedAt, null, it.tsMs])
                     ++changed
                 } else if (rs.rows.item(0).updated_at >= n.updatedAt) {
                     // the local version is newer or the same (e.g. our own push coming back)
@@ -239,7 +241,7 @@ function applyRemote(items, uid) {
                     tx.executeSql("UPDATE notes SET title = ?, description = ?, completed = ?, position = ?, due_date = ?, "
                         + "updated_at = ?, deleted_at = ?, dirty = 0, remote_updated_at = ? WHERE id = ?",
                         [n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
-                         n.updatedAt, n.deletedAt, it.tsMs, it.id])
+                         n.updatedAt, null, it.tsMs, it.id])
                     ++changed
                 }
             }
@@ -253,4 +255,46 @@ function applyRemote(items, uid) {
         }
     })
     return changed
+}
+
+// The server confirmed the delete (or said the note was already gone): remove the row for good, unless
+// the note was changed again meanwhile.
+function purge(id, updatedAt) {
+    db().transaction(function (tx) {
+        tx.executeSql("DELETE FROM notes WHERE id = ? AND deleted_at IS NOT NULL AND updated_at = ?", [id, updatedAt])
+    })
+}
+
+// Notes this device has seen on the server (alive here). Used to find the ones that vanished from it.
+function syncedIds() {
+    var out = []
+    db().readTransaction(function (tx) {
+        var rs = tx.executeSql("SELECT id FROM notes WHERE deleted_at IS NULL AND remote_updated_at IS NOT NULL")
+        for (var i = 0; i < rs.rows.length; ++i)
+            out.push(rs.rows.item(i).id)
+    })
+    return out
+}
+
+// Upload a note again that no longer exists on the server: to the sync it is a brand new note.
+function reupload(id) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET dirty = 1, remote_updated_at = NULL WHERE id = ? AND deleted_at IS NULL", [id])
+    })
+}
+
+// The cloud copy was wiped (key reset): every note here goes up again, pending deletes are moot.
+function forgetRemote() {
+    db().transaction(function (tx) {
+        tx.executeSql("DELETE FROM notes WHERE deleted_at IS NOT NULL")
+        tx.executeSql("UPDATE notes SET dirty = 1, remote_updated_at = NULL")
+        tx.executeSql("DELETE FROM sync_state WHERE key IN ('cursor_ts', 'cursor_id')")
+    })
+}
+
+// The encryption key was created here: notes uploaded before without it go up again, encrypted.
+function markAllDirty() {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET dirty = 1 WHERE deleted_at IS NULL")
+    })
 }

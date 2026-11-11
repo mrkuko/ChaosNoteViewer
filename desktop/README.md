@@ -40,3 +40,18 @@ cp firebase.local.example.json firebase.local.json     # then paste the apiKey i
 The first account that signs in owns the notes on that device. Signing out keeps the notes,
 and only that account can sign in on the device again. The refresh token that keeps you signed in
 is stored in the local database without encryption.
+
+### Sync and encryption
+
+Once signed in (and the email is verified) the widget syncs with Firestore: changes are pushed a
+couple of seconds after they happen, remote changes are pulled every 30 s while the widget is open
+and every 5 min otherwise (slower while offline). Notes are encrypted on the device with
+ChaCha20-Poly1305 (`Crypto.js`) before they are uploaded.
+
+- **Key:** the first device creates a random key and shows it. Save it: it is needed to add another
+  device and cannot be recovered. Settings, Account shows or copies it again at any time. It is stored
+  in the local database, next to the notes it protects the cloud copy of.
+- **Lost the key:** Settings, Reset key deletes everything in the cloud, creates a new key and uploads
+  this device's notes again. Other devices are asked for the new key.
+- **Deleting** removes the note from the cloud for real, the local copy goes once the server confirmed.
+  A device that still has a note deleted elsewhere shows it with a red dot: upload it again or delete it.
