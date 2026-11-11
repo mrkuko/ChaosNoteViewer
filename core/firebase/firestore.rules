@@ -21,8 +21,13 @@ service cloud.firestore {
       }
     }
 
+    // Signed in as this user AND the email is confirmed. email_verified is a claim inside the id token
+    // that Google signs, so a modified client or a hand-made API call can't fake it. Without this check
+    // anyone could sign up with an address that isn't theirs and use the database.
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
     }
   }
 }
