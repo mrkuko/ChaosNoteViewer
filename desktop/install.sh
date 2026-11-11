@@ -18,6 +18,7 @@ for f in plasmoid/contents/ui/*.js; do
     [ -e "shared/$(basename "$f")" ] || rm -f "$f"
 done
 cp shared/*.js shared/*.qml plasmoid/contents/ui/
+rm -rf plasmoid/contents/ui/icons && cp -r shared/icons plasmoid/contents/ui/icons
 
 if kpackagetool6 -t Plasma/Applet -l 2>/dev/null | grep -q "org.kde.plasma.chaosnoteviewer"; then
     kpackagetool6 -t Plasma/Applet -u plasmoid

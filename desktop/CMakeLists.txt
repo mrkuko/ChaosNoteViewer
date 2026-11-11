@@ -36,6 +36,13 @@ foreach(f ${SHARED_FILES})
     set_source_files_properties(${f} PROPERTIES QT_RESOURCE_ALIAS ${name})
 endforeach()
 
+# the app's own icons (black, recolored by the UI), at icons/<name>.svg in the module
+file(GLOB SHARED_ICONS ${CMAKE_CURRENT_SOURCE_DIR}/shared/icons/*.svg ${CMAKE_CURRENT_SOURCE_DIR}/shared/icons/*.png)
+foreach(f ${SHARED_ICONS})
+    get_filename_component(name ${f} NAME)
+    set_source_files_properties(${f} PROPERTIES QT_RESOURCE_ALIAS icons/${name})
+endforeach()
+
 qt_add_executable(chaosnoteviewer src/main.cpp)
 
 qt_add_qml_module(chaosnoteviewer
@@ -51,6 +58,8 @@ qt_add_qml_module(chaosnoteviewer
         qml/NoteDelegate.qml
         qml/TrayController.qml
         ${SHARED_FILES}
+    RESOURCES
+        ${SHARED_ICONS}
 )
 
 target_include_directories(chaosnoteviewer PRIVATE src)
