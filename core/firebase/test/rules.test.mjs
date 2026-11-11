@@ -6,8 +6,9 @@ import { doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp }
 
 let env
 const note = (over = {}) => ({ content: "ciphertext", completed: false, order: 1, serverUpdatedAt: serverTimestamp(), ...over })
-const alice = () => env.authenticatedContext("alice").firestore()
-const bob = () => env.authenticatedContext("bob").firestore()
+const verified = uid => env.authenticatedContext(uid, { email: uid + "@example.com", email_verified: true }).firestore()
+const alice = () => verified("alice")
+const bob = () => verified("bob")
 const path = (uid, id = "n1") => `users/${uid}/notes/${id}`
 
 before(async () => {
@@ -69,4 +70,19 @@ test("meta (wrapped key) is readable and writable only by its owner", async () =
 test("nothing outside users/{uid} is accessible", async () => {
     await assertFails(setDoc(doc(alice(), "other/doc"), { a: 1 }))
     await assertFails(getDoc(doc(alice(), "other/doc")))
+})
+
+test("a user whose email is not verified has no access to their own data", async () => {
+    await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), path("alice")), note({ serverUpdatedAt: Timestamp.now() })))
+    const unverified = env.authenticatedContext("alice", { email: "alice@example.com", email_verified: false }).firestore()
+    await assertFails(getDoc(doc(unverified, path("alice"))))
+    await assertFails(setDoc(doc(unverified, path("alice", "n2")), note()))
+    await assertFails(updateDoc(doc(unverified, path("alice")), { content: "x", serverUpdatedAt: serverTimestamp() }))
+    await assertFails(setDoc(doc(unverified, "users/alice/meta/keys"), { wrapped: "abc" }))
+    await assertFails(getDoc(doc(unverified, "users/alice/meta/keys")))
+})
+
+test("a token without the email_verified claim is treated as unverified", async () => {
+    const noClaim = env.authenticatedContext("alice").firestore()
+    await assertFails(setDoc(doc(noClaim, path("alice")), note()))
 })
