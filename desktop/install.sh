@@ -56,10 +56,12 @@ if emulator:
     port = json.loads(fb.read_text())["emulators"]["auth"]["port"]
     auth = "http://localhost:%d/identitytoolkit.googleapis.com/v1" % port
     token = "http://localhost:%d/securetoken.googleapis.com/v1" % port
+    firestore = "http://localhost:%d/v1" % json.loads(fb.read_text())["emulators"]["firestore"]["port"]
     api_key = api_key or "demo-key"
 else:
     auth = "https://identitytoolkit.googleapis.com/v1"
     token = "https://securetoken.googleapis.com/v1"
+    firestore = "https://firestore.googleapis.com/v1"
 
 out.write_text(
     ".pragma library\n"
@@ -69,7 +71,8 @@ out.write_text(
     "var projectId = " + json.dumps(project) + "\n"
     "var emulator = " + json.dumps(emulator) + "\n"
     "var authUrl = " + json.dumps(auth) + "\n"
-    "var tokenUrl = " + json.dumps(token) + "\n")
+    "var tokenUrl = " + json.dumps(token) + "\n"
+    "var firestoreUrl = " + json.dumps(firestore) + "\n")
 print("generated", out, "(emulator)" if emulator else "(real project)" if api_key else "(no API key: sign-in disabled)")
 PY
 

@@ -193,3 +193,64 @@ function rebindNotes(oldUid, newUid) {
             [newUid, Date.now(), oldUid])
     })
 }
+
+// ---- Sync (see Sync.js) ----
+
+// Notes changed locally and not pushed yet, tombstones included.
+function dirtyRows() {
+    var out = []
+    db().readTransaction(function (tx) {
+        var rs = tx.executeSql("SELECT * FROM notes WHERE dirty = 1 ORDER BY updated_at ASC")
+        for (var i = 0; i < rs.rows.length; ++i)
+            out.push(rs.rows.item(i))
+    })
+    return out
+}
+
+// The push of version `updatedAt` succeeded. If the note was edited meanwhile it stays dirty.
+function markPushed(id, updatedAt, remoteMs) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET dirty = 0, remote_updated_at = ? WHERE id = ? AND updated_at = ?",
+            [remoteMs, id, updatedAt])
+    })
+}
+
+// Merges pulled documents, last write wins on updated_at, and moves the pull cursor past them, all in
+// one transaction. items: [{ id, tsRaw, tsMs, note }], note = null when the document can't be read.
+// Returns how many notes changed on this device.
+function applyRemote(items, uid) {
+    var changed = 0
+    db().transaction(function (tx) {
+        for (var i = 0; i < items.length; ++i) {
+            var it = items[i], n = it.note
+            if (n) {
+                var rs = tx.executeSql("SELECT updated_at, dirty FROM notes WHERE id = ?", [it.id])
+                if (rs.rows.length === 0) {
+                    tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, position, due_date, "
+                        + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                        [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
+                         n.createdAt, n.updatedAt, n.deletedAt, it.tsMs])
+                    ++changed
+                } else if (rs.rows.item(0).updated_at >= n.updatedAt) {
+                    // the local version is newer or the same (e.g. our own push coming back)
+                    if (rs.rows.item(0).dirty === 0)
+                        tx.executeSql("UPDATE notes SET remote_updated_at = ? WHERE id = ?", [it.tsMs, it.id])
+                } else {
+                    tx.executeSql("UPDATE notes SET title = ?, description = ?, completed = ?, position = ?, due_date = ?, "
+                        + "updated_at = ?, deleted_at = ?, dirty = 0, remote_updated_at = ? WHERE id = ?",
+                        [n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
+                         n.updatedAt, n.deletedAt, it.tsMs, it.id])
+                    ++changed
+                }
+            }
+        }
+        if (items.length > 0) {
+            var last = items[items.length - 1]
+            tx.executeSql("INSERT INTO sync_state (key, value) VALUES ('cursor_ts', ?) "
+                + "ON CONFLICT(key) DO UPDATE SET value = excluded.value", [last.tsRaw])
+            tx.executeSql("INSERT INTO sync_state (key, value) VALUES ('cursor_id', ?) "
+                + "ON CONFLICT(key) DO UPDATE SET value = excluded.value", [last.id])
+        }
+    })
+    return changed
+}

@@ -5,6 +5,7 @@ import org.kde.plasma.components as PlasmaComponents3
 import org.kde.kirigami as Kirigami
 import "NoteStore.js" as NoteStore
 import "Auth.js" as Auth
+import "Sync.js" as Sync
 import "FirebaseConfig.js" as FirebaseConfig
 
 PlasmoidItem {
@@ -27,6 +28,9 @@ PlasmoidItem {
     // Account that signed in but has not confirmed its email yet ({ uid, email, idToken, refreshToken }),
     // null otherwise. It is not a session: nothing is bound or stored until the email is verified.
     property var pending: null
+    property bool syncing: false
+    property bool syncAgain: false     // a change arrived while a sync was running
+    property int syncFailures: 0       // consecutive failed syncs, slows the polling down
 
     // All notes, loaded from the local SQLite database (see NoteStore.js).
     ListModel { id: notes }
@@ -58,6 +62,7 @@ PlasmoidItem {
     function addNote(title, description, dueDate) {
         notes.append(NoteStore.add(title, description, dueDate))
         refresh()
+        scheduleSync()
     }
 
     function removeNote(noteId) {
@@ -66,6 +71,7 @@ PlasmoidItem {
         if (i >= 0)
             notes.remove(i)
         refresh()
+        scheduleSync()
     }
 
     function setCompleted(noteId, completed) {
@@ -74,6 +80,7 @@ PlasmoidItem {
         if (i >= 0)
             notes.setProperty(i, "completed", completed)
         refresh()
+        scheduleSync()
     }
 
     function reload() {
@@ -114,6 +121,7 @@ PlasmoidItem {
 
         shown.setProperty(from, "position", pos)
         shown.move(from, to, 1)
+        scheduleSync()
     }
 
     onFilterChanged: refresh()
@@ -146,6 +154,7 @@ PlasmoidItem {
         pending = null
         idToken = account.idToken
         userEmail = account.email
+        syncNow()
         return true
     }
 
@@ -251,6 +260,7 @@ PlasmoidItem {
     // The notes stay on the device (and stay bound to the account); only the session ends.
     function signOut() {
         NoteStore.clearState("refresh_token")
+        pushTimer.stop()
         pending = null
         idToken = ""
         userEmail = ""
@@ -282,8 +292,79 @@ PlasmoidItem {
             }
             NoteStore.setState("refresh_token", result.refreshToken)
             idToken = result.idToken
+            syncNow()
         })
     }
+
+    // ---- Sync (see Sync.js) ----
+    // Pushes local changes a moment after they happen and pulls remote ones. It polls rarely (often while
+    // the widget is open, seldom while it is only an icon) and slows down while offline or failing, so
+    // an idle widget costs one small request every few minutes.
+
+    function scheduleSync() {
+        if (idToken !== "")
+            pushTimer.restart()
+    }
+
+    function syncNow(retried) {
+        if (idToken === "")
+            return
+        if (syncing) {
+            syncAgain = true
+            return
+        }
+        syncing = true
+        Sync.run(NoteStore.getState("uid"), idToken, function (error, result) {
+            if (error && error.code === "UNAUTHENTICATED" && !retried) {
+                // the id token expired: get a new one and try once more
+                Auth.refresh(NoteStore.getState("refresh_token"), function (refreshError, fresh) {
+                    if (refreshError) {
+                        if (Auth.isSessionLost(refreshError))
+                            signOut()
+                        syncFinished(refreshError, null)
+                        return
+                    }
+                    NoteStore.setState("refresh_token", fresh.refreshToken)
+                    idToken = fresh.idToken
+                    syncing = false
+                    syncNow(true)
+                })
+                return
+            }
+            syncFinished(error, result)
+        })
+    }
+
+    function syncFinished(error, result) {
+        syncing = false
+        syncFailures = error ? Math.min(syncFailures + 1, 6) : 0
+        if (result && result.pulled > 0)
+            reload()
+        if (syncAgain && !error) {
+            syncAgain = false
+            syncNow()
+        } else {
+            syncAgain = false
+        }
+    }
+
+    // push soon after a change, merged into one sync when several changes come quickly
+    Timer {
+        id: pushTimer
+        interval: 2000
+        onTriggered: root.syncNow()
+    }
+
+    // 30 s while the widget is open, 5 min otherwise, doubled after each consecutive failure (max 32x)
+    Timer {
+        id: pollTimer
+        running: root.idToken !== ""
+        repeat: true
+        interval: (root.expanded ? 30000 : 300000) * Math.pow(2, root.syncFailures)
+        onTriggered: root.syncNow()
+    }
+
+    onExpandedChanged: if (expanded) syncNow()
 
     Component.onCompleted: {
         reload()
