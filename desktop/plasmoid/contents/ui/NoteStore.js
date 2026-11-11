@@ -148,3 +148,48 @@ function renumber() {
                 [i + 1, now, rs.rows.item(i).id])
     })
 }
+
+// ---- Account state (table sync_state, key/value) ----
+// uid            Firebase uid this database is bound to; notes here belong to that account
+// email          shown in the UI
+// refresh_token  lets the widget sign in again without a password (stored unencrypted in this database)
+
+function getState(key) {
+    var value = ""
+    db().readTransaction(function (tx) {
+        var rs = tx.executeSql("SELECT value FROM sync_state WHERE key = ?", [key])
+        if (rs.rows.length > 0)
+            value = rs.rows.item(0).value
+    })
+    return value
+}
+
+function setState(key, value) {
+    db().transaction(function (tx) {
+        tx.executeSql("INSERT INTO sync_state (key, value) VALUES (?, ?) "
+            + "ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value])
+    })
+}
+
+function clearState(key) {
+    db().transaction(function (tx) {
+        tx.executeSql("DELETE FROM sync_state WHERE key = ?", [key])
+    })
+}
+
+// Notes written before any sign-in have no author; the first account that signs in here owns them.
+function claimNotes(uid) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET author_id = ?, updated_at = ?, dirty = 1 WHERE author_id IS NULL",
+            [uid, Date.now()])
+    })
+}
+
+// The account these notes belonged to was deleted and the same email registered again: hand the notes over
+// and mark them dirty so they sync to the new account.
+function rebindNotes(oldUid, newUid) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET author_id = ?, updated_at = ?, dirty = 1 WHERE author_id = ?",
+            [newUid, Date.now(), oldUid])
+    })
+}

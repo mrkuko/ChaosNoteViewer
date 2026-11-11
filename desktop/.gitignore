@@ -1,2 +1,4 @@
 build/
 plasmoid/contents/ui/Migrations.js
+plasmoid/contents/ui/FirebaseConfig.js
+firebase.local.json

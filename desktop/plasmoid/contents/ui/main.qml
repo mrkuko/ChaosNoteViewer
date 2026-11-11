@@ -4,6 +4,8 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.kirigami as Kirigami
 import "NoteStore.js" as NoteStore
+import "Auth.js" as Auth
+import "FirebaseConfig.js" as FirebaseConfig
 
 PlasmoidItem {
     id: root
@@ -16,8 +18,15 @@ PlasmoidItem {
     property bool filterOpen: false
     property bool settingsOpen: false
     property bool addOpen: false
-    // Placeholder until sign-in exists; the app is local-first and works without an account.
-    property string userEmail: ""
+    // The app is local-first and works without an account; signing in is only needed to sync.
+    property string userEmail: ""      // "" = not signed in
+    property string idToken: ""        // Firebase id token (valid for an hour), kept in memory only
+    property bool authBusy: false
+    property string authError: ""
+    property string authInfo: ""       // confirmation shown under the account form, e.g. "email sent"
+    // Account that signed in but has not confirmed its email yet ({ uid, email, idToken, refreshToken }),
+    // null otherwise. It is not a session: nothing is bound or stored until the email is verified.
+    property var pending: null
 
     // All notes, loaded from the local SQLite database (see NoteStore.js).
     ListModel { id: notes }
@@ -108,7 +117,178 @@ PlasmoidItem {
     }
 
     onFilterChanged: refresh()
-    Component.onCompleted: reload()
+    // ---- Account (Firebase Authentication, see Auth.js) ----
+    // An account counts only once its email is verified. The real check is on the server: the Firestore
+    // rules require email_verified in the signed token, so an unverified account can't reach any data
+    // whatever this widget does. The checks here only keep the UI honest about it.
+
+    // Binds this device's notes to a verified account. A database belongs to one account for good,
+    // so signing in as somebody else is refused; the first account to sign in claims the existing notes.
+    function sameEmail(a, b) {
+        return a.trim().toLowerCase() === b.trim().toLowerCase()
+    }
+
+    function startSession(account) {
+        const bound = NoteStore.getState("uid")
+        if (bound !== "" && bound !== account.uid) {
+            // Same email, different uid: emails are unique in Firebase, so the account these notes
+            // belonged to was deleted and this verified one replaces it. Anyone else is refused.
+            if (!sameEmail(account.email, NoteStore.getState("email"))) {
+                authError = i18n("The notes on this device belong to %1. Sign in with that account.", NoteStore.getState("email"))
+                return false
+            }
+            NoteStore.rebindNotes(bound, account.uid)
+        }
+        NoteStore.setState("uid", account.uid)
+        NoteStore.setState("email", account.email)
+        NoteStore.setState("refresh_token", account.refreshToken)
+        NoteStore.claimNotes(account.uid)
+        pending = null
+        idToken = account.idToken
+        userEmail = account.email
+        return true
+    }
+
+    function authenticate(create, email, password) {
+        authError = ""
+        authInfo = ""
+        if (create && NoteStore.getState("uid") !== "" && !sameEmail(email, NoteStore.getState("email"))) {
+            authError = i18n("The notes on this device belong to %1, so a new account can't be created here.", NoteStore.getState("email"))
+            return
+        }
+        authBusy = true
+        const done = function (error, account) {
+            authBusy = false
+            if (error) {
+                authError = error.message
+            } else if (Auth.isVerified(account.idToken)) {
+                startSession(account)
+            } else {
+                pending = account
+                if (create)
+                    resendVerification()
+                else
+                    authInfo = i18n("%1 is not verified yet. Open the link from the verification email, then press Continue.", account.email)
+            }
+        }
+        if (create)
+            Auth.signUp(email, password, done)
+        else
+            Auth.signIn(email, password, done)
+    }
+
+    // Gets a fresh token from Firebase; once the link in the email was opened it says email_verified.
+    function checkVerified() {
+        if (!pending)
+            return
+        authError = ""
+        authInfo = ""
+        authBusy = true
+        Auth.refresh(pending.refreshToken, function (error, result) {
+            authBusy = false
+            if (error) {
+                authError = error.message
+                if (Auth.isSessionLost(error))
+                    pending = null
+                return
+            }
+            const account = { uid: result.uid, email: pending.email, idToken: result.idToken, refreshToken: result.refreshToken }
+            if (Auth.isVerified(account.idToken)) {
+                startSession(account)
+            } else {
+                pending = account
+                authError = Auth.errorText("NOT_VERIFIED")
+            }
+        })
+    }
+
+    // Sends the verification email again (with a fresh token, the old one may have expired).
+    function resendVerification() {
+        if (!pending)
+            return
+        authError = ""
+        authBusy = true
+        Auth.refresh(pending.refreshToken, function (error, result) {
+            if (error) {
+                authBusy = false
+                authError = error.message
+                return
+            }
+            pending = { uid: result.uid, email: pending.email, idToken: result.idToken, refreshToken: result.refreshToken }
+            Auth.sendVerification(result.idToken, function (error) {
+                authBusy = false
+                if (error)
+                    authError = error.message
+                else
+                    authInfo = i18n("We sent a verification link to %1. Open it, then press Continue. Check your spam folder too.", pending.email)
+            })
+        })
+    }
+
+    function cancelPending() {
+        pending = null
+        authError = ""
+        authInfo = ""
+    }
+
+    function resetPassword(email) {
+        authError = ""
+        authInfo = ""
+        if (email === "") {
+            authError = Auth.errorText("MISSING_EMAIL")
+            return
+        }
+        authBusy = true
+        Auth.sendPasswordReset(email, function (error) {
+            authBusy = false
+            if (error)
+                authError = error.code === "EMAIL_NOT_FOUND" ? Auth.errorText("RESET_EMAIL_NOT_FOUND") : error.message
+            else
+                authInfo = i18n("Password reset email sent to %1. Check your spam folder too.", email)
+        })
+    }
+
+    // The notes stay on the device (and stay bound to the account); only the session ends.
+    function signOut() {
+        NoteStore.clearState("refresh_token")
+        pending = null
+        idToken = ""
+        userEmail = ""
+        authError = ""
+        authInfo = ""
+    }
+
+    // Signs in again from the stored refresh token. Offline keeps the session, only a revoked one ends it.
+    // A session from before verification was required, still unverified, goes back to waiting for it.
+    function restoreSession() {
+        const token = NoteStore.getState("refresh_token")
+        if (token === "")
+            return
+        userEmail = NoteStore.getState("email")
+        if (!FirebaseConfig.configured)
+            return
+        Auth.refresh(token, function (error, result) {
+            if (error) {
+                if (Auth.isSessionLost(error))
+                    signOut()
+                return
+            }
+            if (!Auth.isVerified(result.idToken)) {
+                const email = userEmail
+                signOut()
+                pending = { uid: result.uid, email: email, idToken: result.idToken, refreshToken: result.refreshToken }
+                authInfo = i18n("%1 is not verified yet. Open the link from the verification email, then press Continue.", email)
+                return
+            }
+            NoteStore.setState("refresh_token", result.refreshToken)
+            idToken = result.idToken
+        })
+    }
+
+    Component.onCompleted: {
+        reload()
+        restoreSession()
+    }
 
     compactRepresentation: MouseArea {
         id: compact
@@ -388,7 +568,7 @@ PlasmoidItem {
                     }
                 }
 
-                // Settings placeholder; real options arrive with the features they control.
+                // Settings; real options arrive with the features they control.
                 ColumnLayout {
                     spacing: Kirigami.Units.largeSpacing
 
@@ -397,21 +577,200 @@ PlasmoidItem {
                         level: 4
                         text: i18n("Account")
                     }
-                    PlasmaComponents3.Label {
+
+                    // signed in
+                    ColumnLayout {
+                        visible: root.userEmail !== ""
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
-                        wrapMode: Text.Wrap
-                        opacity: 0.7
-                        text: i18n("Notes are stored on this device. Sign in to sync them between devices.")
+                        spacing: Kirigami.Units.largeSpacing
+
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: i18n("Signed in as %1", root.userEmail)
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            opacity: 0.7
+                            text: i18n("Your notes stay on this device when you sign out.")
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authInfo !== ""
+                            wrapMode: Text.Wrap
+                            color: Kirigami.Theme.positiveTextColor
+                            text: root.authInfo
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authError !== ""
+                            wrapMode: Text.Wrap
+                            color: Kirigami.Theme.negativeTextColor
+                            text: root.authError
+                        }
+                        PlasmaComponents3.Button {
+                            text: i18n("Sign out")
+                            icon.name: "system-log-out"
+                            onClicked: root.signOut()
+                        }
                     }
-                    PlasmaComponents3.Button {
+
+                    // signed in, email not verified yet
+                    ColumnLayout {
+                        visible: root.userEmail === "" && root.pending !== null
+                        Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Sign in to sync")
-                        icon.name: "user-identity"
-                        enabled: false // sign-in is not implemented yet
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.largeSpacing
+
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: i18n("Verify your email: %1", root.pending ? root.pending.email : "")
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authInfo !== ""
+                            wrapMode: Text.Wrap
+                            opacity: 0.8
+                            text: root.authInfo
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authError !== ""
+                            wrapMode: Text.Wrap
+                            color: Kirigami.Theme.negativeTextColor
+                            text: root.authError
+                        }
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            PlasmaComponents3.Button {
+                                text: i18n("Continue")
+                                icon.name: "dialog-ok"
+                                enabled: !root.authBusy
+                                onClicked: root.checkVerified()
+                            }
+                            PlasmaComponents3.Button {
+                                text: i18n("Resend email")
+                                icon.name: "mail-send"
+                                enabled: !root.authBusy
+                                onClicked: root.resendVerification()
+                            }
+                            PlasmaComponents3.Button {
+                                flat: true
+                                text: i18n("Cancel")
+                                enabled: !root.authBusy
+                                onClicked: root.cancelPending()
+                            }
+                            PlasmaComponents3.BusyIndicator {
+                                running: root.authBusy
+                                visible: root.authBusy
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            }
+                        }
+                    }
+
+                    // signed out
+                    ColumnLayout {
+                        visible: root.userEmail === "" && root.pending === null
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.largeSpacing
+
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            opacity: 0.7
+                            text: FirebaseConfig.configured
+                                ? i18n("Notes are stored on this device. Sign in to sync them between devices.")
+                                : i18n("Notes are stored on this device. Sign-in is not set up: add your Firebase API key to desktop/firebase.local.json and run install.sh.")
+                        }
+
+                        PlasmaComponents3.TextField {
+                            id: emailField
+                            Layout.fillWidth: true
+                            visible: FirebaseConfig.configured
+                            enabled: !root.authBusy
+                            placeholderText: i18n("Email")
+                            inputMethodHints: Qt.ImhEmailCharactersOnly
+                            onAccepted: passwordField.forceActiveFocus()
+                        }
+                        PlasmaComponents3.TextField {
+                            id: passwordField
+                            Layout.fillWidth: true
+                            visible: FirebaseConfig.configured
+                            enabled: !root.authBusy
+                            placeholderText: i18n("Password")
+                            echoMode: TextInput.Password
+                            onAccepted: signInButton.clicked()
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authInfo !== ""
+                            wrapMode: Text.Wrap
+                            color: Kirigami.Theme.positiveTextColor
+                            text: root.authInfo
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            visible: root.authError !== ""
+                            wrapMode: Text.Wrap
+                            color: Kirigami.Theme.negativeTextColor
+                            text: root.authError
+                        }
+                        RowLayout {
+                            visible: FirebaseConfig.configured
+                            spacing: Kirigami.Units.smallSpacing
+
+                            PlasmaComponents3.Button {
+                                id: signInButton
+                                text: i18n("Sign in")
+                                icon.name: "user-identity"
+                                enabled: !root.authBusy && emailField.text.trim() !== "" && passwordField.text !== ""
+                                onClicked: {
+                                    if (enabled)
+                                        root.authenticate(false, emailField.text.trim(), passwordField.text)
+                                }
+                            }
+                            PlasmaComponents3.Button {
+                                text: i18n("Create account")
+                                enabled: signInButton.enabled
+                                onClicked: root.authenticate(true, emailField.text.trim(), passwordField.text)
+                            }
+                            PlasmaComponents3.Button {
+                                flat: true
+                                text: i18n("Forgot password?")
+                                enabled: !root.authBusy
+                                onClicked: root.resetPassword(emailField.text.trim())
+                            }
+                            PlasmaComponents3.BusyIndicator {
+                                running: root.authBusy
+                                visible: root.authBusy
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            }
+                        }
                     }
                     Item { Layout.fillHeight: true }
+
+                    // the password never outlives a successful sign-in
+                    Connections {
+                        target: root
+                        function onUserEmailChanged() {
+                            if (root.userEmail !== "")
+                                passwordField.text = ""
+                        }
+                        function onPendingChanged() {
+                            if (root.pending !== null)
+                                passwordField.text = ""
+                        }
+                    }
                 }
             }
 
@@ -435,8 +794,8 @@ PlasmoidItem {
                     elide: Text.ElideRight
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.8
-                    text: root.userEmail !== ""
-                        ? i18n("Signed in as %1", root.userEmail)
+                    text: root.userEmail !== "" ? i18n("Signed in as %1", root.userEmail)
+                        : root.pending !== null ? i18n("Waiting for email verification · local only")
                         : i18n("Not signed in · local only")
                 }
             }

@@ -1,0 +1,4 @@
+{
+  "apiKey": "paste the Web API key from Firebase project settings here",
+  "emulator": false
+}
