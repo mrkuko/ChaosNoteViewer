@@ -7,7 +7,7 @@
 // Stored text:   "v1." + base64url( nonce[12] || ciphertext || tag[16] )
 // Key:           32 random bytes, shown to the user as base32 in groups of four (ABCD-EFGH-...)
 // Bound to:      the note id (authenticated data), so the server can't move a ciphertext to another note.
-// Randomness:    Qt.uuid() (QUuid::createUuid uses the system CSPRNG), never Math.random().
+// Randomness:    the key comes from the operating system (/dev/urandom), see below.
 
 var VERSION = "v1."
 
@@ -101,17 +101,35 @@ function base64urlDecode(text) {
 }
 
 // ---------- random ----------
+// Keys need real randomness and QML has none: the widget gets the bytes of a new key from the operating
+// system (/dev/urandom), see main.qml, and hands them to keyFromBytes(). A nonce only has to be unique,
+// not secret, so the engine's ordinary random numbers are enough for it; the time and a counter are mixed
+// in so two nonces can't repeat even if the random numbers did.
 
-function randomBytes(n) {
-    var out = new Uint8Array(n)
-    var have = 0
-    while (have < n) {
-        // a v4 uuid has 122 random bits; skip the fixed version and variant digits
-        var hex = Qt.uuid().replace(/[{}-]/g, "")
-        hex = hex.slice(0, 12) + hex.slice(13, 16) + hex.slice(17)
-        for (var i = 0; i + 1 < hex.length && have < n; i += 2)
-            out[have++] = parseInt(hex.substr(i, 2), 16)
+var _counter = 0
+
+function _nonce() {
+    var n = new Uint8Array(12), i
+    for (i = 0; i < 12; ++i)
+        n[i] = Math.floor(Math.random() * 256)
+    var t = Date.now(), c = ++_counter
+    for (i = 0; i < 6; ++i) {
+        n[i] ^= t % 256
+        t = Math.floor(t / 256)
     }
+    n[6] ^= c & 255
+    n[7] ^= (c >> 8) & 255
+    return n
+}
+
+// "0a1b..." -> bytes, null unless it is exactly `length` bytes of hex
+function fromHex(text, length) {
+    var hex = String(text).trim()
+    if (hex.length !== 2 * length || !/^[0-9a-fA-F]+$/.test(hex))
+        return null
+    var out = new Uint8Array(length)
+    for (var i = 0; i < length; ++i)
+        out[i] = parseInt(hex.substr(2 * i, 2), 16)
     return out
 }
 
@@ -288,7 +306,7 @@ function open(key, sealed, aad) {
 // ---------- text API ----------
 
 function encrypt(key, text, aad) {
-    return VERSION + base64urlEncode(seal(key, randomBytes(12), utf8Encode(text), utf8Encode(aad)))
+    return VERSION + base64urlEncode(seal(key, _nonce(), utf8Encode(text), utf8Encode(aad)))
 }
 
 // null when the text is not ours, was changed, or the key is wrong
@@ -303,15 +321,26 @@ function decrypt(key, token, aad) {
 }
 
 // ---------- the key as the user sees it ----------
+// 32 bytes as base32 (52 letters/digits) plus a 4 character checksum, so a typo is caught when the key is
+// typed in. Shown as 4 lines of "XXXXXXX-XXXXXXX"; on one line (to copy) as 8 groups of 7. A key without
+// the checksum (52 characters, as shown by earlier versions) is still accepted.
 
 var _B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
-function generateKey() { return randomBytes(32) }
+function _crc32(bytes) {
+    var crc = 0xffffffff
+    for (var i = 0; i < bytes.length; ++i) {
+        crc ^= bytes[i]
+        for (var k = 0; k < 8; ++k)
+            crc = (crc & 1) ? ((crc >>> 1) ^ 0xedb88320) >>> 0 : crc >>> 1
+    }
+    return (crc ^ 0xffffffff) >>> 0
+}
 
-function formatKey(key) {
+function _base32(bytes) {
     var s = "", acc = 0, bits = 0
-    for (var i = 0; i < key.length; ++i) {
-        acc = (acc << 8) | key[i]
+    for (var i = 0; i < bytes.length; ++i) {
+        acc = (acc << 8) | bytes[i]
         bits += 8
         while (bits >= 5) {
             bits -= 5
@@ -321,16 +350,34 @@ function formatKey(key) {
     }
     if (bits > 0)
         s += _B32.charAt((acc << (5 - bits)) & 31)
-    return s.match(/.{1,4}/g).join("-")
+    return s
 }
 
-// 32 key bytes from what the user typed (dashes, spaces and case don't matter), or null
+function _checksum(key) {
+    var c = _crc32(key)
+    return _B32.charAt((c >>> 27) & 31) + _B32.charAt((c >>> 22) & 31) + _B32.charAt((c >>> 17) & 31) + _B32.charAt((c >>> 12) & 31)
+}
+
+function _keyChars(key) { return _base32(key) + _checksum(key) }     // 56 characters
+
+// one line, 8 groups of 7: the form that is stored and copied
+function formatKey(key) { return _keyChars(key).match(/.{7}/g).join("-") }
+
+// four lines of 14 characters, the form that is displayed
+function formatKeyBlock(key) {
+    var g = _keyChars(key).match(/.{7}/g), lines = []
+    for (var i = 0; i < g.length; i += 2)
+        lines.push(g[i] + "-" + g[i + 1])
+    return lines.join("\n")
+}
+
+// 32 key bytes from what the user typed (dashes, spaces, line breaks and case don't matter), or null
 function parseKey(text) {
     var s = String(text).replace(/[\s-]/g, "").toUpperCase()
-    if (s.length !== 52)
+    if (s.length !== 52 && s.length !== 56)
         return null
     var out = [], acc = 0, bits = 0
-    for (var i = 0; i < s.length; ++i) {
+    for (var i = 0; i < 52; ++i) {
         var v = _B32.indexOf(s.charAt(i))
         if (v < 0)
             return null
@@ -342,5 +389,10 @@ function parseKey(text) {
             acc &= (1 << bits) - 1
         }
     }
-    return acc === 0 && out.length === 32 ? new Uint8Array(out) : null
+    if (acc !== 0 || out.length !== 32)
+        return null
+    var key = new Uint8Array(out)
+    if (s.length === 56 && s.slice(52) !== _checksum(key))
+        return null
+    return key
 }

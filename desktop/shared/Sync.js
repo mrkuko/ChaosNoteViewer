@@ -98,22 +98,28 @@ function _parse(json) {
 function push(uid, token, key, done) {
     var rows = NoteStore.dirtyRows()
     var sent = 0
-    var queue = []
+    var uploads = [], removals = []
     for (var i = 0; i < rows.length; ++i) {
         var row = rows[i]
         if (row.deleted_at === null)
-            queue.push({ row: row, remove: false })
+            uploads.push({ row: row, remove: false })
         else if (row.remote_updated_at === null)
             NoteStore.purge(row.id, row.updated_at)             // never uploaded: nothing to delete
         else
-            queue.push({ row: row, remove: true })
+            removals.push({ row: row, remove: true })
     }
+    // uploads first, and a commit never mixes the two: one refused write rejects the whole commit, and a
+    // refused delete must not keep the new and changed notes from reaching the server
+    var queue = uploads.concat(removals)
     function next() {
         if (queue.length === 0) {
             done(null, sent)
             return
         }
-        var batch = queue.splice(0, PUSH_BATCH)
+        var count = 0
+        while (count < queue.length && count < PUSH_BATCH && queue[count].remove === queue[0].remove)
+            ++count
+        var batch = queue.splice(0, count)
         var writes = []
         for (var i = 0; i < batch.length; ++i) {
             var name = _root(uid) + "/notes/" + batch[i].row.id

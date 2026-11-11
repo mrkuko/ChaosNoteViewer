@@ -3,11 +3,8 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.kirigami as Kirigami
-import "NoteStore.js" as NoteStore
-import "Auth.js" as Auth
-import "Sync.js" as Sync
-import "KeyFlow.js" as KeyFlow
-import "FirebaseConfig.js" as FirebaseConfig
+import org.kde.plasma.plasma5support as P5Support
+import "Crypto.js" as Crypto
 
 PlasmoidItem {
     id: root
@@ -15,464 +12,45 @@ PlasmoidItem {
     Plasmoid.icon: "chaosnoteviewer"
     toolTipMainText: i18n("Chaos Note Viewer")
 
-    // 0 = Uncompleted (default), 1 = Completed, 2 = All
-    property int filter: 0
+    // UI state of this launcher
     property bool filterOpen: false
     property bool settingsOpen: false
     property bool addOpen: false
-    // The app is local-first and works without an account; signing in is only needed to sync.
-    property string userEmail: ""      // "" = not signed in
-    property string idToken: ""        // Firebase id token (valid for an hour), kept in memory only
-    property bool authBusy: false
-    property string authError: ""
-    property string authInfo: ""       // confirmation shown under the account form, e.g. "email sent"
-    // Account that signed in but has not confirmed its email yet ({ uid, email, idToken, refreshToken }),
-    // null otherwise. It is not a session: nothing is bound or stored until the email is verified.
-    property var pending: null
-    property bool syncing: false
-    property bool syncAgain: false     // a change arrived while a sync was running
-    property int syncFailures: 0       // consecutive failed syncs, slows the polling down
-    // Encryption key of the cloud copy (KeyFlow.js): "" = not decided yet (offline), "enter" = the cloud
-    // has a key this device doesn't know, "save" = a new key must be shown and confirmed, "ready" = sync runs.
-    property string keyPhase: ""
-    property bool keyMismatch: false   // the key was changed on another device
-    property bool keyBusy: false
-    property string keyError: ""
-    property string keyValue: ""       // the key as shown to the user, "" until needed
-    property bool keyShown: false
-    property bool resetOpen: false
-    // Notes this device had synced that are gone from the server (deleted on another device).
-    property var missingIds: ({})
-    property double lastReconcile: 0
 
-    // All notes, loaded from the local SQLite database (see NoteStore.js).
-    ListModel { id: notes }
-
-    // Filtered copy of `notes`; srcIndex maps a row back to its source note.
-    ListModel { id: shown }
-
-    function refresh() {
-        shown.clear()
-        for (let i = 0; i < notes.count; ++i) {
-            const n = notes.get(i)
-            if (filter === 2 || (filter === 0) === !n.completed)
-                shown.append({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed, dueDate: n.dueDate, position: n.position,
-                              missing: missingIds[n.noteId] === true })
-        }
+    // Everything that is not Plasma-specific lives in the shared AppController.qml (notes, account,
+    // encryption key, sync). This widget supplies the open/closed state and the source of random numbers.
+    AppController {
+        id: ctl
+        active: root.expanded
+        entropy: root.osRandom
     }
 
-    function startOfToday() {
-        const d = new Date()
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-    }
-
-    function indexOfNote(noteId) {
-        for (let i = 0; i < notes.count; ++i)
-            if (notes.get(i).noteId === noteId)
-                return i
-        return -1
-    }
-
-    function addNote(title, description, dueDate) {
-        notes.append(NoteStore.add(title, description, dueDate))
-        refresh()
-        scheduleSync()
-    }
-
-    function removeNote(noteId) {
-        NoteStore.remove(noteId)
-        const i = indexOfNote(noteId)
-        if (i >= 0)
-            notes.remove(i)
-        refresh()
-        scheduleSync()
-    }
-
-    function setCompleted(noteId, completed) {
-        NoteStore.setCompleted(noteId, completed)
-        const i = indexOfNote(noteId)
-        if (i >= 0)
-            notes.setProperty(i, "completed", completed)
-        refresh()
-        scheduleSync()
-    }
-
-    function reload() {
-        notes.clear()
-        for (const n of NoteStore.all())
-            notes.append(n)
-        refresh()
-    }
-
-    // Applies a drag: the note shown at row `from` is dropped at row `to` of the shown list.
-    function dropNote(from, to) {
-        const visible = []
-        for (let i = 0; i < shown.count; ++i)
-            visible.push(shown.get(i).position)
-
-        let pos = NoteStore.dropPosition(visible, from, to)
-        if (pos !== null && isNaN(pos)) {
-            NoteStore.renumber()
-            reload()
-            for (let i = 0; i < shown.count; ++i)
-                visible[i] = shown.get(i).position
-            pos = NoteStore.dropPosition(visible, from, to)
-        }
-        if (pos === null || isNaN(pos))
-            return
-
-        const noteId = shown.get(from).noteId
-        NoteStore.setPosition(noteId, pos)
-
-        // keep both models in order without rebuilding them
-        const notesFrom = indexOfNote(noteId)
-        notes.setProperty(notesFrom, "position", pos)
-        let notesTo = 0
-        for (let i = 0; i < notes.count; ++i)
-            if (i !== notesFrom && notes.get(i).position < pos)
-                ++notesTo
-        notes.move(notesFrom, notesTo, 1)
-
-        shown.setProperty(from, "position", pos)
-        shown.move(from, to, 1)
-        scheduleSync()
-    }
-
-    onFilterChanged: refresh()
-    // ---- Account (Firebase Authentication, see Auth.js) ----
-    // An account counts only once its email is verified. The real check is on the server: the Firestore
-    // rules require email_verified in the signed token, so an unverified account can't reach any data
-    // whatever this widget does. The checks here only keep the UI honest about it.
-
-    // Binds this device's notes to a verified account. A database belongs to one account for good,
-    // so signing in as somebody else is refused; the first account to sign in claims the existing notes.
-    function sameEmail(a, b) {
-        return a.trim().toLowerCase() === b.trim().toLowerCase()
-    }
-
-    function startSession(account) {
-        const bound = NoteStore.getState("uid")
-        if (bound !== "" && bound !== account.uid) {
-            // Same email, different uid: emails are unique in Firebase, so the account these notes
-            // belonged to was deleted and this verified one replaces it. Anyone else is refused.
-            if (!sameEmail(account.email, NoteStore.getState("email"))) {
-                authError = i18n("The notes on this device belong to %1. Sign in with that account.", NoteStore.getState("email"))
-                return false
-            }
-            NoteStore.rebindNotes(bound, account.uid)
-        }
-        NoteStore.setState("uid", account.uid)
-        NoteStore.setState("email", account.email)
-        NoteStore.setState("refresh_token", account.refreshToken)
-        NoteStore.claimNotes(account.uid)
-        pending = null
-        idToken = account.idToken
-        userEmail = account.email
-        startKeyFlow()
-        return true
-    }
-
-    function authenticate(create, email, password) {
-        authError = ""
-        authInfo = ""
-        if (create && NoteStore.getState("uid") !== "" && !sameEmail(email, NoteStore.getState("email"))) {
-            authError = i18n("The notes on this device belong to %1, so a new account can't be created here.", NoteStore.getState("email"))
-            return
-        }
-        authBusy = true
-        const done = function (error, account) {
-            authBusy = false
-            if (error) {
-                authError = error.message
-            } else if (Auth.isVerified(account.idToken)) {
-                startSession(account)
-            } else {
-                pending = account
-                if (create)
-                    resendVerification()
-                else
-                    authInfo = i18n("%1 is not verified yet. Open the link from the verification email, then press Continue.", account.email)
-            }
-        }
-        if (create)
-            Auth.signUp(email, password, done)
-        else
-            Auth.signIn(email, password, done)
-    }
-
-    // Gets a fresh token from Firebase; once the link in the email was opened it says email_verified.
-    function checkVerified() {
-        if (!pending)
-            return
-        authError = ""
-        authInfo = ""
-        authBusy = true
-        Auth.refresh(pending.refreshToken, function (error, result) {
-            authBusy = false
-            if (error) {
-                authError = error.message
-                if (Auth.isSessionLost(error))
-                    pending = null
+    // QML has no secure random numbers: ask the operating system for n random bytes.
+    property var randomWaiting: ({})
+    property int randomCounter: 0
+    P5Support.DataSource {
+        id: randomSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function (source, data) {
+            disconnectSource(source)
+            const done = root.randomWaiting[source]
+            if (!done)
                 return
-            }
-            const account = { uid: result.uid, email: pending.email, idToken: result.idToken, refreshToken: result.refreshToken }
-            if (Auth.isVerified(account.idToken)) {
-                startSession(account)
-            } else {
-                pending = account
-                authError = Auth.errorText("NOT_VERIFIED")
-            }
-        })
-    }
-
-    // Sends the verification email again (with a fresh token, the old one may have expired).
-    function resendVerification() {
-        if (!pending)
-            return
-        authError = ""
-        authBusy = true
-        Auth.refresh(pending.refreshToken, function (error, result) {
-            if (error) {
-                authBusy = false
-                authError = error.message
-                return
-            }
-            pending = { uid: result.uid, email: pending.email, idToken: result.idToken, refreshToken: result.refreshToken }
-            Auth.sendVerification(result.idToken, function (error) {
-                authBusy = false
-                if (error)
-                    authError = error.message
-                else
-                    authInfo = i18n("We sent a verification link to %1. Open it, then press Continue. Check your spam folder too.", pending.email)
-            })
-        })
-    }
-
-    function cancelPending() {
-        pending = null
-        authError = ""
-        authInfo = ""
-    }
-
-    function resetPassword(email) {
-        authError = ""
-        authInfo = ""
-        if (email === "") {
-            authError = Auth.errorText("MISSING_EMAIL")
-            return
-        }
-        authBusy = true
-        Auth.sendPasswordReset(email, function (error) {
-            authBusy = false
-            if (error)
-                authError = error.code === "EMAIL_NOT_FOUND" ? Auth.errorText("RESET_EMAIL_NOT_FOUND") : error.message
+            delete root.randomWaiting[source]
+            const bytes = Crypto.fromHex(String(data.stdout || ""), done.length)
+            if (bytes === null)
+                done.callback({ code: "RANDOM", message: i18n("Could not get random numbers from the system (%1).", String(data.stderr || "").trim()) }, null)
             else
-                authInfo = i18n("Password reset email sent to %1. Check your spam folder too.", email)
-        })
-    }
-
-    // The notes stay on the device (and stay bound to the account); only the session ends.
-    function signOut() {
-        NoteStore.clearState("refresh_token")
-        pushTimer.stop()
-        keyPhase = ""
-        keyMismatch = false
-        keyError = ""
-        keyValue = ""
-        keyShown = false
-        resetOpen = false
-        missingIds = ({})
-        lastReconcile = 0
-        pending = null
-        idToken = ""
-        userEmail = ""
-        authError = ""
-        authInfo = ""
-    }
-
-    // Signs in again from the stored refresh token. Offline keeps the session, only a revoked one ends it.
-    // A session from before verification was required, still unverified, goes back to waiting for it.
-    function restoreSession() {
-        const token = NoteStore.getState("refresh_token")
-        if (token === "")
-            return
-        userEmail = NoteStore.getState("email")
-        if (!FirebaseConfig.configured)
-            return
-        Auth.refresh(token, function (error, result) {
-            if (error) {
-                if (Auth.isSessionLost(error))
-                    signOut()
-                return
-            }
-            if (!Auth.isVerified(result.idToken)) {
-                const email = userEmail
-                signOut()
-                pending = { uid: result.uid, email: email, idToken: result.idToken, refreshToken: result.refreshToken }
-                authInfo = i18n("%1 is not verified yet. Open the link from the verification email, then press Continue.", email)
-                return
-            }
-            NoteStore.setState("refresh_token", result.refreshToken)
-            idToken = result.idToken
-            startKeyFlow()
-        })
-    }
-
-    // ---- Sync (see Sync.js) and the encryption key (see KeyFlow.js) ----
-    // Pushes local changes a moment after they happen and pulls remote ones. It polls rarely (often while
-    // the widget is open, seldom while it is only an icon) and slows down while offline or failing, so
-    // an idle widget costs one small request every few minutes. Nothing syncs until the key is ready.
-
-    // Runs a server call with the current id token; an expired one is refreshed once and the call repeated.
-    function authed(call, done, retried) {
-        call(idToken, function (error, result) {
-            if (error && error.code === "UNAUTHENTICATED" && !retried) {
-                Auth.refresh(NoteStore.getState("refresh_token"), function (refreshError, fresh) {
-                    if (refreshError) {
-                        if (Auth.isSessionLost(refreshError))
-                            signOut()
-                        done(refreshError, null)
-                        return
-                    }
-                    NoteStore.setState("refresh_token", fresh.refreshToken)
-                    idToken = fresh.idToken
-                    authed(call, done, true)
-                })
-                return
-            }
-            done(error, result)
-        })
-    }
-
-    function scheduleSync() {
-        if (idToken !== "")
-            pushTimer.restart()
-    }
-
-    function startKeyFlow() {
-        if (idToken === "" || keyBusy)
-            return
-        keyBusy = true
-        keyError = ""
-        KeyFlow.begin(authed, NoteStore.getState("uid"), function (error, result) {
-            keyBusy = false
-            keyPhase = result.phase
-            keyMismatch = result.mismatch
-            keyValue = keyPhase === "save" ? KeyFlow.keyText() : ""
-            syncFailures = error ? Math.min(syncFailures + 1, 6) : 0
-            if (!error && keyPhase === "ready")
-                syncNow()
-        })
-    }
-
-    function submitKey(text) {
-        keyBusy = true
-        keyError = ""
-        KeyFlow.enter(authed, NoteStore.getState("uid"), text, function (error, result) {
-            keyBusy = false
-            if (error || !result.ok) {
-                keyError = error ? error.message : result.message
-                return
-            }
-            keyMismatch = false
-            keyPhase = "ready"
-            syncNow()
-        })
-    }
-
-    function confirmKey() {
-        KeyFlow.confirmSaved()
-        keyPhase = "ready"
-        keyValue = ""
-        keyShown = false
-        syncNow()
-    }
-
-    function toggleKeyShown() {
-        keyShown = !keyShown
-        keyValue = keyShown ? KeyFlow.keyText() : ""
-    }
-
-    // Lost key: wipes the cloud copy, makes a new key, uploads this device's notes again (after the "save" step).
-    function resetKey() {
-        keyBusy = true
-        keyError = ""
-        KeyFlow.reset(authed, NoteStore.getState("uid"), function (error) {
-            keyBusy = false
-            resetOpen = false
-            missingIds = ({})
-            if (error) {
-                keyError = error.message
-                startKeyFlow()                    // find out what state the failed reset left behind
-                return
-            }
-            keyMismatch = false
-            keyShown = false
-            keyPhase = "save"
-            keyValue = KeyFlow.keyText()
-            refresh()
-        })
-    }
-
-    function syncNow() {
-        if (idToken === "" || keyPhase !== "ready")
-            return
-        if (syncing) {
-            syncAgain = true
-            return
-        }
-        syncing = true
-        const uid = NoteStore.getState("uid")
-        authed(function (token, done) { Sync.run(uid, token, KeyFlow.currentKey(), done) }, syncFinished)
-    }
-
-    function syncFinished(error, result) {
-        syncing = false
-        if (error && error.code === "BAD_KEY") {
-            // the cloud copy was re-encrypted with another key (reset on another device)
-            keyMismatch = true
-            keyPhase = "enter"
-            return
-        }
-        syncFailures = error ? Math.min(syncFailures + 1, 6) : 0
-        if (result && result.pulled > 0)
-            reload()
-        if (!error && Date.now() - lastReconcile > 600000)
-            checkMissing()
-        if (syncAgain && !error) {
-            syncAgain = false
-            syncNow()
-        } else {
-            syncAgain = false
+                done.callback(null, bytes)
         }
     }
 
-    // Marks notes that this device synced before but the server no longer has (deleted on another device).
-    // Costs one count query; the ids are only fetched when the numbers differ.
-    function checkMissing() {
-        lastReconcile = Date.now()
-        const uid = NoteStore.getState("uid")
-        authed(function (token, done) { Sync.reconcile(uid, token, done) }, function (error, ids) {
-            if (error) {
-                lastReconcile = 0                 // try again at the next sync
-                return
-            }
-            const map = {}
-            for (const id of ids)
-                map[id] = true
-            missingIds = map
-            refresh()
-        })
-    }
-
-    // Puts a note back on the server that was deleted there.
-    function reuploadNote(noteId) {
-        NoteStore.reupload(noteId)
-        const map = Object.assign({}, missingIds)
-        delete map[noteId]
-        missingIds = map
-        refresh()
-        scheduleSync()
+    function osRandom(n, callback) {
+        // the trailing comment only makes every command text unique, the engine runs a text once at a time
+        const command = "head -c " + n + " /dev/urandom | od -An -tx1 | tr -d ' \\n' # " + (++randomCounter)
+        randomWaiting[command] = { length: n, callback: callback }
+        randomSource.connectSource(command)
     }
 
     function copyText(text) {
@@ -481,37 +59,6 @@ PlasmoidItem {
         clipboard.copy()
     }
     TextEdit { id: clipboard; visible: false }
-
-    // push soon after a change, merged into one sync when several changes come quickly
-    Timer {
-        id: pushTimer
-        interval: 2000
-        onTriggered: root.syncNow()
-    }
-
-    // 30 s while the widget is open, 5 min otherwise, doubled after each consecutive failure (max 64x)
-    Timer {
-        id: pollTimer
-        running: root.idToken !== ""
-        repeat: true
-        interval: (root.expanded ? 30000 : 300000) * Math.pow(2, root.syncFailures)
-        onTriggered: root.keyPhase === "" ? root.startKeyFlow() : root.syncNow()
-    }
-
-    onExpandedChanged: {
-        if (!expanded)
-            return
-        lastReconcile = 0                          // look for notes missing online whenever the widget is opened
-        if (keyPhase === "")
-            startKeyFlow()
-        else
-            syncNow()
-    }
-
-    Component.onCompleted: {
-        reload()
-        restoreSession()
-    }
 
     compactRepresentation: MouseArea {
         id: compact
@@ -599,8 +146,8 @@ PlasmoidItem {
                             Layout.fillWidth: true
                             text: modelData
                             checkable: true
-                            checked: root.filter === index
-                            onClicked: root.filter = index
+                            checked: ctl.filter === index
+                            onClicked: ctl.filter = index
                         }
                     }
                 }
@@ -622,7 +169,7 @@ PlasmoidItem {
                     bottomMargin: Kirigami.Units.smallSpacing
                     leftMargin: Kirigami.Units.smallSpacing
                     rightMargin: Kirigami.Units.smallSpacing
-                    model: shown
+                    model: ctl.shown
 
 
                     // Drag to reorder. While a card is dragged the other cards only slide out of its way
@@ -654,7 +201,7 @@ PlasmoidItem {
                         visible: list.count === 0
                         horizontalAlignment: Text.AlignHCenter
                         opacity: 0.6
-                        text: notes.count === 0 ? i18n("No notes yet.\nPress + to add one.") : i18n("Nothing here")
+                        text: ctl.notes.count === 0 ? i18n("No notes yet.\nPress + to add one.") : i18n("Nothing here")
                     }
 
                     delegate: Item {
@@ -724,7 +271,7 @@ PlasmoidItem {
                                         spacing: Kirigami.Units.smallSpacing
 
                                         // overdue = deadline day is before today and the note is still open
-                                        readonly property bool overdue: !model.completed && model.dueDate < root.startOfToday()
+                                        readonly property bool overdue: !model.completed && model.dueDate < ctl.startOfToday()
 
                                         Kirigami.Icon {
                                             source: "view-calendar"
@@ -748,7 +295,7 @@ PlasmoidItem {
                                     icon.name: "cloud-upload"
                                     opacity: hover.hovered ? 1 : 0
                                     enabled: hover.hovered
-                                    onClicked: root.reuploadNote(model.noteId)
+                                    onClicked: ctl.reuploadNote(model.noteId)
                                     PlasmaComponents3.ToolTip { text: i18n("Upload again") }
                                 }
 
@@ -757,14 +304,14 @@ PlasmoidItem {
                                     icon.name: "edit-delete"
                                     opacity: hover.hovered ? 1 : 0
                                     enabled: hover.hovered
-                                    onClicked: root.removeNote(model.noteId)
+                                    onClicked: ctl.removeNote(model.noteId)
                                     PlasmaComponents3.ToolTip { text: i18n("Delete") }
                                 }
 
                                 PlasmaComponents3.CheckBox {
                                     Layout.alignment: Qt.AlignVCenter
                                     checked: model.completed
-                                    onToggled: root.setCompleted(model.noteId, checked)
+                                    onToggled: ctl.setCompleted(model.noteId, checked)
                                 }
                             }
 
@@ -812,7 +359,7 @@ PlasmoidItem {
                                         view.settling = true
                                         view.dragFrom = -1
                                         view.dragTo = -1
-                                        root.dropNote(from, to)
+                                        ctl.dropNote(from, to)
                                         card.y = 0
                                         view.settling = false
                                     }
@@ -834,7 +381,7 @@ PlasmoidItem {
 
                     // signed in
                     ColumnLayout {
-                        visible: root.userEmail !== ""
+                        visible: ctl.userEmail !== ""
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -843,7 +390,7 @@ PlasmoidItem {
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
-                            text: i18n("Signed in as %1", root.userEmail)
+                            text: i18n("Signed in as %1", ctl.userEmail)
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
@@ -853,17 +400,17 @@ PlasmoidItem {
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authInfo !== ""
+                            visible: ctl.authInfo !== ""
                             wrapMode: Text.Wrap
                             color: Kirigami.Theme.positiveTextColor
-                            text: root.authInfo
+                            text: ctl.authInfo
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authError !== ""
+                            visible: ctl.authError !== ""
                             wrapMode: Text.Wrap
                             color: Kirigami.Theme.negativeTextColor
-                            text: root.authError
+                            text: ctl.authError
                         }
                         // ---- encryption key of the cloud copy ----
                         ColumnLayout {
@@ -874,17 +421,40 @@ PlasmoidItem {
                                 level: 5
                                 text: i18n("Encryption key")
                             }
-                            PlasmaComponents3.Label {
+                            RowLayout {
+                                visible: ctl.keyBusy
                                 Layout.fillWidth: true
-                                visible: root.keyPhase === "" && !root.keyBusy
-                                wrapMode: Text.Wrap
-                                opacity: 0.7
-                                text: i18n("Waiting for a connection to check the encryption key. Sync starts after that.")
+                                spacing: Kirigami.Units.largeSpacing
+                                PlasmaComponents3.BusyIndicator {
+                                    running: ctl.keyBusy
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                }
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.Wrap
+                                    text: i18n("Setting up encryption. Please keep this open, it is not finished yet.")
+                                }
+                            }
+                            RowLayout {
+                                visible: ctl.keyPhase === "" && !ctl.keyBusy
+                                Layout.fillWidth: true
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.Wrap
+                                    opacity: 0.7
+                                    text: i18n("The encryption key is not checked yet, so nothing syncs.")
+                                }
+                                PlasmaComponents3.Button {
+                                    text: i18n("Retry")
+                                    icon.name: "view-refresh"
+                                    onClicked: ctl.startKeyFlow()
+                                }
                             }
 
                             // a new key was made: show it, sync waits for the confirmation
                             ColumnLayout {
-                                visible: root.keyPhase === "save"
+                                visible: ctl.keyPhase === "save"
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
                                 PlasmaComponents3.Label {
@@ -892,39 +462,50 @@ PlasmoidItem {
                                     wrapMode: Text.Wrap
                                     text: i18n("Your notes are encrypted on this device before they are uploaded. This is your key. Without it nobody, you included, can read the notes in the cloud. Store it somewhere safe, you need it to add another device. Sync starts when you confirm.")
                                 }
-                                TextEdit {
-                                    Layout.fillWidth: true
-                                    readOnly: true
-                                    selectByMouse: true
-                                    wrapMode: TextEdit.WrapAnywhere
-                                    font.family: "monospace"
-                                    font.bold: true
-                                    color: Kirigami.Theme.textColor
-                                    text: root.keyValue
+                                // four fixed lines, never re-wrapped by the width of the window
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    implicitWidth: keyBlockSave.implicitWidth + Kirigami.Units.largeSpacing * 2
+                                    implicitHeight: keyBlockSave.implicitHeight + Kirigami.Units.largeSpacing * 2
+                                    radius: Kirigami.Units.cornerRadius
+                                    color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
+                                    TextEdit {
+                                        id: keyBlockSave
+                                        anchors.centerIn: parent
+                                        readOnly: true
+                                        selectByMouse: true
+                                        wrapMode: TextEdit.NoWrap
+                                        horizontalAlignment: TextEdit.AlignHCenter
+                                        font.family: "monospace"
+                                        font.bold: true
+                                        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
+                                        color: Kirigami.Theme.textColor
+                                        text: ctl.keyValue
+                                    }
                                 }
                                 RowLayout {
                                     PlasmaComponents3.Button {
                                         text: i18n("Copy key")
                                         icon.name: "edit-copy"
-                                        onClicked: root.copyText(root.keyValue)
+                                        onClicked: root.copyText(ctl.keyText())
                                     }
                                     PlasmaComponents3.Button {
                                         text: i18n("I saved it")
                                         icon.name: "dialog-ok"
-                                        onClicked: root.confirmKey()
+                                        onClicked: ctl.confirmKey()
                                     }
                                 }
                             }
 
                             // the cloud has a key this device doesn't know
                             ColumnLayout {
-                                visible: root.keyPhase === "enter"
+                                visible: ctl.keyPhase === "enter"
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
                                 PlasmaComponents3.Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.Wrap
-                                    text: root.keyMismatch
+                                    text: ctl.keyMismatch
                                         ? i18n("The key for this account was changed on another device. Enter the new key to sync again.")
                                         : i18n("The notes in the cloud are encrypted. Enter your encryption key to sync this device.")
                                 }
@@ -933,74 +514,79 @@ PlasmoidItem {
                                     Layout.fillWidth: true
                                     placeholderText: i18n("XXXX-XXXX-XXXX-...")
                                     font.family: "monospace"
-                                    enabled: !root.keyBusy
-                                    onAccepted: root.submitKey(text)
+                                    enabled: !ctl.keyBusy
+                                    onAccepted: ctl.submitKey(text)
                                     Connections {
-                                        target: root
+                                        target: ctl
                                         function onKeyPhaseChanged() { keyField.text = "" }
                                     }
                                 }
                                 PlasmaComponents3.Button {
                                     text: i18n("Unlock")
                                     icon.name: "unlock"
-                                    enabled: !root.keyBusy && keyField.text.trim() !== ""
-                                    onClicked: root.submitKey(keyField.text)
+                                    enabled: !ctl.keyBusy && keyField.text.trim() !== ""
+                                    onClicked: ctl.submitKey(keyField.text)
                                 }
                             }
 
                             // key known: show or copy it on demand
                             ColumnLayout {
-                                visible: root.keyPhase === "ready"
+                                visible: ctl.keyPhase === "ready"
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
                                 RowLayout {
                                     PlasmaComponents3.Button {
-                                        text: root.keyShown ? i18n("Hide key") : i18n("Show key")
-                                        icon.name: root.keyShown ? "hide_table_row" : "view-visible"
-                                        onClicked: root.toggleKeyShown()
+                                        text: ctl.keyShown ? i18n("Hide key") : i18n("Show key")
+                                        icon.name: ctl.keyShown ? "hide_table_row" : "view-visible"
+                                        onClicked: ctl.toggleKeyShown()
                                     }
                                     PlasmaComponents3.Button {
                                         text: i18n("Copy key")
                                         icon.name: "edit-copy"
-                                        onClicked: root.copyText(KeyFlow.keyText())
+                                        onClicked: root.copyText(ctl.keyText())
                                     }
                                 }
-                                TextEdit {
-                                    Layout.fillWidth: true
-                                    visible: root.keyShown
-                                    readOnly: true
-                                    selectByMouse: true
-                                    wrapMode: TextEdit.WrapAnywhere
-                                    font.family: "monospace"
-                                    color: Kirigami.Theme.textColor
-                                    text: root.keyValue
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    visible: ctl.keyShown
+                                    implicitWidth: keyBlockReady.implicitWidth + Kirigami.Units.largeSpacing * 2
+                                    implicitHeight: keyBlockReady.implicitHeight + Kirigami.Units.largeSpacing * 2
+                                    radius: Kirigami.Units.cornerRadius
+                                    color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
+                                    TextEdit {
+                                        id: keyBlockReady
+                                        anchors.centerIn: parent
+                                        readOnly: true
+                                        selectByMouse: true
+                                        wrapMode: TextEdit.NoWrap
+                                        horizontalAlignment: TextEdit.AlignHCenter
+                                        font.family: "monospace"
+                                        font.bold: true
+                                        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
+                                        color: Kirigami.Theme.textColor
+                                        text: ctl.keyValue
+                                    }
                                 }
                             }
 
                             PlasmaComponents3.Label {
                                 Layout.fillWidth: true
-                                visible: root.keyError !== ""
+                                visible: ctl.keyError !== ""
                                 wrapMode: Text.Wrap
                                 color: Kirigami.Theme.negativeTextColor
-                                text: root.keyError
-                            }
-                            PlasmaComponents3.BusyIndicator {
-                                running: root.keyBusy
-                                visible: root.keyBusy
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                text: ctl.keyError
                             }
 
                             // lost key
                             PlasmaComponents3.Button {
-                                visible: (root.keyPhase === "enter" || root.keyPhase === "ready") && !root.resetOpen
+                                visible: (ctl.keyPhase === "enter" || ctl.keyPhase === "ready") && !ctl.resetOpen
                                 flat: true
-                                text: root.keyPhase === "enter" ? i18n("Lost the key? Reset…") : i18n("Reset key…")
-                                enabled: !root.keyBusy
-                                onClicked: root.resetOpen = true
+                                text: ctl.keyPhase === "enter" ? i18n("Lost the key? Reset…") : i18n("Reset key…")
+                                enabled: !ctl.keyBusy
+                                onClicked: ctl.resetOpen = true
                             }
                             ColumnLayout {
-                                visible: root.resetOpen
+                                visible: ctl.resetOpen
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
                                 PlasmaComponents3.Label {
@@ -1013,14 +599,14 @@ PlasmoidItem {
                                     PlasmaComponents3.Button {
                                         text: i18n("Delete cloud notes and make a new key")
                                         icon.name: "edit-delete"
-                                        enabled: !root.keyBusy
-                                        onClicked: root.resetKey()
+                                        enabled: !ctl.keyBusy
+                                        onClicked: ctl.resetKey()
                                     }
                                     PlasmaComponents3.Button {
                                         flat: true
                                         text: i18n("Cancel")
-                                        enabled: !root.keyBusy
-                                        onClicked: root.resetOpen = false
+                                        enabled: !ctl.keyBusy
+                                        onClicked: ctl.resetOpen = false
                                     }
                                 }
                             }
@@ -1029,13 +615,13 @@ PlasmoidItem {
                         PlasmaComponents3.Button {
                             text: i18n("Sign out")
                             icon.name: "system-log-out"
-                            onClicked: root.signOut()
+                            onClicked: ctl.signOut()
                         }
                     }
 
                     // signed in, email not verified yet
                     ColumnLayout {
-                        visible: root.userEmail === "" && root.pending !== null
+                        visible: ctl.userEmail === "" && ctl.pending !== null
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -1044,21 +630,21 @@ PlasmoidItem {
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
-                            text: i18n("Verify your email: %1", root.pending ? root.pending.email : "")
+                            text: i18n("Verify your email: %1", ctl.pending ? ctl.pending.email : "")
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authInfo !== ""
+                            visible: ctl.authInfo !== ""
                             wrapMode: Text.Wrap
                             opacity: 0.8
-                            text: root.authInfo
+                            text: ctl.authInfo
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authError !== ""
+                            visible: ctl.authError !== ""
                             wrapMode: Text.Wrap
                             color: Kirigami.Theme.negativeTextColor
-                            text: root.authError
+                            text: ctl.authError
                         }
                         RowLayout {
                             spacing: Kirigami.Units.smallSpacing
@@ -1066,24 +652,24 @@ PlasmoidItem {
                             PlasmaComponents3.Button {
                                 text: i18n("Continue")
                                 icon.name: "dialog-ok"
-                                enabled: !root.authBusy
-                                onClicked: root.checkVerified()
+                                enabled: !ctl.authBusy
+                                onClicked: ctl.checkVerified()
                             }
                             PlasmaComponents3.Button {
                                 text: i18n("Resend email")
                                 icon.name: "mail-send"
-                                enabled: !root.authBusy
-                                onClicked: root.resendVerification()
+                                enabled: !ctl.authBusy
+                                onClicked: ctl.resendVerification()
                             }
                             PlasmaComponents3.Button {
                                 flat: true
                                 text: i18n("Cancel")
-                                enabled: !root.authBusy
-                                onClicked: root.cancelPending()
+                                enabled: !ctl.authBusy
+                                onClicked: ctl.cancelPending()
                             }
                             PlasmaComponents3.BusyIndicator {
-                                running: root.authBusy
-                                visible: root.authBusy
+                                running: ctl.authBusy
+                                visible: ctl.authBusy
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                             }
@@ -1092,7 +678,7 @@ PlasmoidItem {
 
                     // signed out
                     ColumnLayout {
-                        visible: root.userEmail === "" && root.pending === null
+                        visible: ctl.userEmail === "" && ctl.pending === null
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -1102,7 +688,7 @@ PlasmoidItem {
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
                             opacity: 0.7
-                            text: FirebaseConfig.configured
+                            text: ctl.configured
                                 ? i18n("Notes are stored on this device. Sign in to sync them between devices.")
                                 : i18n("Notes are stored on this device. Sign-in is not set up: add your Firebase API key to desktop/firebase.local.json and run install.sh.")
                         }
@@ -1110,8 +696,8 @@ PlasmoidItem {
                         PlasmaComponents3.TextField {
                             id: emailField
                             Layout.fillWidth: true
-                            visible: FirebaseConfig.configured
-                            enabled: !root.authBusy
+                            visible: ctl.configured
+                            enabled: !ctl.authBusy
                             placeholderText: i18n("Email")
                             inputMethodHints: Qt.ImhEmailCharactersOnly
                             onAccepted: passwordField.forceActiveFocus()
@@ -1119,54 +705,54 @@ PlasmoidItem {
                         PlasmaComponents3.TextField {
                             id: passwordField
                             Layout.fillWidth: true
-                            visible: FirebaseConfig.configured
-                            enabled: !root.authBusy
+                            visible: ctl.configured
+                            enabled: !ctl.authBusy
                             placeholderText: i18n("Password")
                             echoMode: TextInput.Password
                             onAccepted: signInButton.clicked()
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authInfo !== ""
+                            visible: ctl.authInfo !== ""
                             wrapMode: Text.Wrap
                             color: Kirigami.Theme.positiveTextColor
-                            text: root.authInfo
+                            text: ctl.authInfo
                         }
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
-                            visible: root.authError !== ""
+                            visible: ctl.authError !== ""
                             wrapMode: Text.Wrap
                             color: Kirigami.Theme.negativeTextColor
-                            text: root.authError
+                            text: ctl.authError
                         }
                         RowLayout {
-                            visible: FirebaseConfig.configured
+                            visible: ctl.configured
                             spacing: Kirigami.Units.smallSpacing
 
                             PlasmaComponents3.Button {
                                 id: signInButton
                                 text: i18n("Sign in")
                                 icon.name: "user-identity"
-                                enabled: !root.authBusy && emailField.text.trim() !== "" && passwordField.text !== ""
+                                enabled: !ctl.authBusy && emailField.text.trim() !== "" && passwordField.text !== ""
                                 onClicked: {
                                     if (enabled)
-                                        root.authenticate(false, emailField.text.trim(), passwordField.text)
+                                        ctl.authenticate(false, emailField.text.trim(), passwordField.text)
                                 }
                             }
                             PlasmaComponents3.Button {
                                 text: i18n("Create account")
                                 enabled: signInButton.enabled
-                                onClicked: root.authenticate(true, emailField.text.trim(), passwordField.text)
+                                onClicked: ctl.authenticate(true, emailField.text.trim(), passwordField.text)
                             }
                             PlasmaComponents3.Button {
                                 flat: true
                                 text: i18n("Forgot password?")
-                                enabled: !root.authBusy
-                                onClicked: root.resetPassword(emailField.text.trim())
+                                enabled: !ctl.authBusy
+                                onClicked: ctl.resetPassword(emailField.text.trim())
                             }
                             PlasmaComponents3.BusyIndicator {
-                                running: root.authBusy
-                                visible: root.authBusy
+                                running: ctl.authBusy
+                                visible: ctl.authBusy
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                             }
@@ -1176,13 +762,13 @@ PlasmoidItem {
 
                     // the password never outlives a successful sign-in
                     Connections {
-                        target: root
+                        target: ctl
                         function onUserEmailChanged() {
-                            if (root.userEmail !== "")
+                            if (ctl.userEmail !== "")
                                 passwordField.text = ""
                         }
                         function onPendingChanged() {
-                            if (root.pending !== null)
+                            if (ctl.pending !== null)
                                 passwordField.text = ""
                         }
                     }
@@ -1202,16 +788,29 @@ PlasmoidItem {
                     width: Kirigami.Units.smallSpacing * 2
                     height: width
                     radius: width / 2
-                    color: root.userEmail !== "" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                    color: ctl.userEmail === "" ? Kirigami.Theme.disabledTextColor
+                        : ctl.syncError !== "" ? Kirigami.Theme.negativeTextColor
+                        : ctl.keyPhase === "save" || ctl.keyPhase === "enter" ? Kirigami.Theme.neutralTextColor
+                        : Kirigami.Theme.positiveTextColor
                 }
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.8
-                    text: root.userEmail !== "" ? i18n("Signed in as %1", root.userEmail)
-                        : root.pending !== null ? i18n("Waiting for email verification · local only")
+                    text: ctl.userEmail !== "" ? (
+                            ctl.syncError !== "" ? i18n("Sync failed: %1", ctl.syncError)
+                            : ctl.keyPhase === "save" ? i18n("Confirm your encryption key in Settings to start syncing")
+                            : ctl.keyPhase === "enter" ? i18n("Enter your encryption key in Settings to sync")
+                            : ctl.syncing ? i18n("Syncing…")
+                            : i18n("Signed in as %1", ctl.userEmail))
+                        : ctl.pending !== null ? i18n("Waiting for email verification · local only")
                         : i18n("Not signed in · local only")
+                    PlasmaComponents3.ToolTip {
+                        visible: footerHover.hovered && ctl.syncError !== ""
+                        text: ctl.syncError
+                    }
+                    HoverHandler { id: footerHover }
                 }
             }
         }
@@ -1230,7 +829,7 @@ PlasmoidItem {
                 const title = titleField.text.trim()
                 if (title === "")
                     return
-                root.addNote(title, descField.text.trim(), due)
+                ctl.addNote(title, descField.text.trim(), due)
                 root.addOpen = false
             }
 
@@ -1336,7 +935,7 @@ PlasmoidItem {
                             PlasmaComponents3.Button {
                                 text: i18n("Today")
                                 onClicked: {
-                                    addOverlay.due = root.startOfToday()
+                                    addOverlay.due = ctl.startOfToday()
                                     calendar.showMonthOf(addOverlay.due)
                                 }
                             }
