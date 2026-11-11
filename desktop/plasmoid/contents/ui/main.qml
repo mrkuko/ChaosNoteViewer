@@ -75,8 +75,8 @@ PlasmoidItem {
     fullRepresentation: Item {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 34
         Layout.preferredWidth: Kirigami.Units.gridUnit * 48
-        Layout.minimumHeight: Kirigami.Units.gridUnit * 24
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 42
+        Layout.minimumHeight: Kirigami.Units.gridUnit * 12
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 24
 
         ColumnLayout {
             anchors.fill: parent
@@ -140,7 +140,8 @@ PlasmoidItem {
                         Kirigami.Heading {
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.smallSpacing
-                            level: 3
+                            level: 1
+                            font.weight: 900
                             elide: Text.ElideRight
                             text: root.settingsOpen ? i18n("Settings")
                                 : [i18n("Open notes"), i18n("Completed"), i18n("All notes"), i18n("Important")][ctl.filter]

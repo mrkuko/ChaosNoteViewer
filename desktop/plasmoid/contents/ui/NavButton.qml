@@ -45,7 +45,7 @@ PlasmaComponents3.ToolButton {
     Accessible.name: tip
     implicitHeight: iconSize + Kirigami.Units.largeSpacing
     implicitWidth: label !== "" ? contentRow.implicitWidth + Kirigami.Units.largeSpacing * 2
-                                 : wide ? implicitHeight * 1.5 : implicitHeight
+                                 : wide ? implicitHeight * 1.3 : implicitHeight
 
     // no standard background at all: its highlight color is what made the selected icon disappear
     background: Item {
