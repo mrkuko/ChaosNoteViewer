@@ -18,7 +18,8 @@ CREATE TABLE notes (
     created_at  INTEGER NOT NULL,
     -- bumped on every change, last-write-wins tiebreaker for sync
     updated_at  INTEGER NOT NULL,
-    -- soft delete tombstone, NULL = alive; rows are never physically removed while sync may need them
+    -- NULL = alive. Set when the user deletes the note: the row is hidden and kept only until the server
+    -- confirmed the delete (or answered not found), then removed for good. There are no tombstones in the cloud.
     deleted_at  INTEGER
 );
 
