@@ -43,9 +43,18 @@ test("signed-out user has no access", async () => {
     await assertFails(setDoc(doc(anon, path("alice")), note()))
 })
 
-test("notes are never physically deleted", async () => {
+test("owner can delete own note, deleting a missing note is fine", async () => {
     await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), path("alice")), note({ serverUpdatedAt: Timestamp.now() })))
-    await assertFails(deleteDoc(doc(alice(), path("alice"))))
+    await assertSucceeds(deleteDoc(doc(alice(), path("alice"))))
+    await assertSucceeds(deleteDoc(doc(alice(), path("alice"))))   // already gone: a retry after a lost reply
+})
+
+test("nobody else can delete a note", async () => {
+    await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), path("alice")), note({ serverUpdatedAt: Timestamp.now() })))
+    await assertFails(deleteDoc(doc(bob(), path("alice"))))
+    await assertFails(deleteDoc(doc(env.unauthenticatedContext().firestore(), path("alice"))))
+    const unverified = env.authenticatedContext("alice", { email: "alice@example.com", email_verified: false }).firestore()
+    await assertFails(deleteDoc(doc(unverified, path("alice"))))
 })
 
 test("serverUpdatedAt must be the server time", async () => {

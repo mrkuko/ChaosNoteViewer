@@ -7,15 +7,16 @@ service cloud.firestore {
 
       match /notes/{noteId} {
         allow read: if isOwner(uid);
-        // Notes are soft-deleted (tombstones), never physically removed.
         allow create, update: if isOwner(uid)
           && request.resource.data.serverUpdatedAt == request.time  // pull cursor must be server time
           && request.resource.data.content is string
           && request.resource.data.content.size() < 200000;
-        allow delete: if false;
+        // A client deletes a note for real once the user removed it. There are no tombstones: devices that
+        // still have it find out by comparing with the server and offer to upload it again.
+        allow delete: if isOwner(uid);
       }
 
-      // wrapped data key, written by the encryption part
+      // encryption key check (an encrypted known string, never the key itself)
       match /meta/{doc} {
         allow read, write: if isOwner(uid);
       }
