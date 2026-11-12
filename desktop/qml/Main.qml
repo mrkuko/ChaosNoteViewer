@@ -1,6 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+// Not used here: NoteStore.js imports it via ".import", which windeployqt does not scan.
+// Declaring it in a .qml file makes windeployqt ship the module on Windows.
+import QtQuick.LocalStorage
 
 // The tray app's popup. Same screens as the Plasma widget (plasmoid/contents/ui/main.qml): side navigation,
 // notes list with sort, new/edit/detail pages, settings, sync state in the footer. All app logic is in the

@@ -2,35 +2,24 @@
 #include <QElapsedTimer>
 #include <QIcon>
 #include <QMenu>
-#include <QPainter>
-#include <QPixmap>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QSystemTrayIcon>
 
-// Placeholder tray icon until real artwork exists.
-static QIcon makeTrayIcon()
+// The app logo (desktop/assets/chaosnoteviewer.png, embedded in the executable). On Linux the icon
+// theme's "chaosnoteviewer" icon wins when it is installed (the Plasma widget uses the same name).
+static QIcon appIcon()
 {
-    QPixmap pm(64, 64);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setBrush(QColor("#3daee9"));
-    p.setPen(Qt::NoPen);
-    p.drawRoundedRect(QRectF(6, 6, 52, 52), 12, 12);
-    p.setPen(QPen(Qt::white, 5, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(20, 24, 44, 24);
-    p.drawLine(20, 34, 44, 34);
-    p.drawLine(20, 44, 34, 44);
-    return QIcon(pm);
+    return QIcon::fromTheme("chaosnoteviewer", QIcon(":/qt/qml/ChaosNotes/app-icon.png"));
 }
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
+    app.setWindowIcon(appIcon());
     QQuickStyle::setStyle("Basic");
 
     QQmlApplicationEngine engine;
@@ -57,7 +46,7 @@ int main(int argc, char *argv[])
         window->requestActivate();
     };
 
-    QSystemTrayIcon tray(makeTrayIcon());
+    QSystemTrayIcon tray(appIcon());
     tray.setToolTip("Chaos Note Viewer");
 
     QMenu menu;

@@ -5,18 +5,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Quick QuickControls2)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Quick QuickControls2 Sql)
 qt_standard_project_setup(REQUIRES 6.5)
 qt_policy(SET QTP0004 NEW)
 
-# shared/Migrations.js and shared/FirebaseConfig.js are generated, see generate.sh (needs bash and python3)
-execute_process(COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/generate.sh
+# shared/Migrations.js and shared/FirebaseConfig.js are generated, see generate.py (needs Python 3)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/generate.py
                 RESULT_VARIABLE GENERATE_RESULT)
 if(NOT GENERATE_RESULT EQUAL 0)
-    message(FATAL_ERROR "generate.sh failed")
+    message(FATAL_ERROR "generate.py failed")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/generate.sh
+    ${CMAKE_CURRENT_SOURCE_DIR}/generate.py
     ${CMAKE_CURRENT_SOURCE_DIR}/../core/storage/migrations
     ${CMAKE_CURRENT_SOURCE_DIR}/firebase.local.json)
 
@@ -43,7 +44,17 @@ foreach(f ${SHARED_ICONS})
     set_source_files_properties(${f} PROPERTIES QT_RESOURCE_ALIAS icons/${name})
 endforeach()
 
-qt_add_executable(chaosnoteviewer src/main.cpp)
+# the app logo, embedded as a Qt resource (tray + window icon, see src/main.cpp)
+set_source_files_properties(assets/chaosnoteviewer.png PROPERTIES QT_RESOURCE_ALIAS app-icon.png)
+
+# WIN32 = Windows GUI app (no console window); ignored on Linux
+qt_add_executable(chaosnoteviewer WIN32 src/main.cpp)
+
+# the .exe's own icon (Explorer, taskbar, notification area)
+if(WIN32)
+    enable_language(RC)
+    target_sources(chaosnoteviewer PRIVATE assets/chaosnoteviewer.rc)
+endif()
 
 # Theme.qml is a singleton (colors and sizes of the tray UI)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -70,7 +81,8 @@ qt_add_qml_module(chaosnoteviewer
         ${SHARED_FILES}
     RESOURCES
         ${SHARED_ICONS}
+        assets/chaosnoteviewer.png
 )
 
 target_include_directories(chaosnoteviewer PRIVATE src)
-target_link_libraries(chaosnoteviewer PRIVATE Qt6::Widgets Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(chaosnoteviewer PRIVATE Qt6::Widgets Qt6::Quick Qt6::QuickControls2 Qt6::Sql)

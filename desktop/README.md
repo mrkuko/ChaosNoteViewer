@@ -4,13 +4,22 @@ Qt 6 / QML + C++ 17 tray app. Built with CMake.
 
 ## Build and run
 
+Linux:
+
 ```
 cmake -S . -B build
 cmake --build build
 ./build/chaosnoteviewer
 ```
 
-Requires Qt 6.5+ (Quick, QuickControls2), plus bash and python3 for `generate.sh`, which CMake runs.
+Requires Qt 6.5+ (Quick, QuickControls2) and Python 3 for `generate.py`, which CMake runs.
+
+Windows (installs Python, CMake, Ninja, MSVC Build Tools via winget and Qt via aqtinstall, then builds
+into `dist\`; re-runnable):
+
+```
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
 
 ## Plasma widget
 
