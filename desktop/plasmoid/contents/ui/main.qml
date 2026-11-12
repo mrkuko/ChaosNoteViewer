@@ -427,10 +427,17 @@ PlasmoidItem {
                                             onClicked: ctl.removeNote(model.noteId)
                                         }
 
-                                        PlasmaComponents3.CheckBox {
+                                        // shown only while the pointer is on the note; completed notes are already
+                                        // struck through and dimmed, so the button then reopens the note
+                                        NavButton {
                                             Layout.alignment: Qt.AlignVCenter
-                                            checked: model.completed
-                                            onToggled: ctl.setCompleted(model.noteId, checked)
+                                            iconName: "check-double"
+                                            iconSize: Kirigami.Units.iconSizes.smallMedium
+                                            wide: false
+                                            tip: model.completed ? i18n("Mark as not completed") : i18n("Mark as completed")
+                                            opacity: hover.hovered ? 1 : 0
+                                            enabled: hover.hovered
+                                            onClicked: ctl.setCompleted(model.noteId, !model.completed)
                                         }
                                     }
 
