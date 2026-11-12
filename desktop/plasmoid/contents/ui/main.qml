@@ -54,6 +54,15 @@ PlasmoidItem {
         randomSource.connectSource(command)
     }
 
+    // Note text as StyledText: escaped, with every http(s):// or www. address turned into a clickable link.
+    function linkify(text) {
+        const esc = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        return esc.replace(/\b((?:https?:\/\/|www\.)[^\s<>"]*[^\s<>".,;:!?)\]'])/gi, function (url) {
+            const href = /^www\./i.test(url) ? "https://" + url : url
+            return "<a href=\"" + href + "\">" + url + "</a>"
+        })
+    }
+
     function copyText(text) {
         clipboard.text = text
         clipboard.selectAll()
@@ -367,7 +376,11 @@ PlasmoidItem {
 
                                             PlasmaComponents3.Label {
                                                 Layout.fillWidth: true
-                                                text: model.title
+                                                text: root.linkify(model.title)
+                                                textFormat: Text.StyledText
+                                                linkColor: Kirigami.Theme.linkColor
+                                                onLinkActivated: link => Qt.openUrlExternally(link)
+                                                HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
                                                 font.bold: true
                                                 font.strikeout: model.completed
                                                 elide: Text.ElideRight
@@ -375,7 +388,11 @@ PlasmoidItem {
                                             PlasmaComponents3.Label {
                                                 Layout.fillWidth: true
                                                 visible: text !== ""
-                                                text: model.description
+                                                text: root.linkify(model.description)
+                                                textFormat: Text.StyledText
+                                                linkColor: Kirigami.Theme.linkColor
+                                                onLinkActivated: link => Qt.openUrlExternally(link)
+                                                HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
                                                 maximumLineCount: 1
                                                 elide: Text.ElideRight
                                                 opacity: 0.7
