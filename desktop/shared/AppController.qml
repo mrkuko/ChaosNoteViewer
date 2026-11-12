@@ -129,7 +129,11 @@ Item {
         return d !== 0 ? d : a.position - b.position
     }
 
+    // bumped on every refresh(), so views of one note (the detail page) can follow its changes
+    property int revision: 0
+
     function refresh() {
+        ++revision
         const rows = []
         for (let i = 0; i < notes.count; ++i) {
             const n = notes.get(i)

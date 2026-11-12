@@ -19,6 +19,9 @@ PlasmoidItem {
     property var editNote: null
     // number of notes the "delete all completed" confirmation is asking about; 0 = not asking
     property int confirmDeleteCount: 0
+    // the note shown in the detail page ("" = none) and the note its delete confirmation asks about
+    property string detailId: ""
+    property string confirmNoteId: ""
 
     // Everything that is not Plasma-specific lives in the shared AppController.qml (notes, account,
     // encryption key, sync). This widget supplies the open/closed state and the source of random numbers.
@@ -371,6 +374,12 @@ PlasmoidItem {
 
                                     Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
                                     HoverHandler { id: hover }
+
+                                    // a click on the card (not on a button or link, which sit above it) opens the note
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: root.detailId = model.noteId
+                                    }
 
                                     RowLayout {
                                         id: row
@@ -983,6 +992,156 @@ PlasmoidItem {
             }
         }
 
+        // ---- Note details: a full-window page, opened by clicking a note ----
+        Rectangle {
+            id: detailOverlay
+            anchors.fill: parent
+            visible: root.detailId !== ""
+            color: Kirigami.Theme.backgroundColor
+            z: 8
+
+            // the note, read again whenever the list changes (ctl.revision); null once it is gone
+            readonly property var note: {
+                ctl.revision
+                const i = root.detailId === "" ? -1 : ctl.indexOfNote(root.detailId)
+                return i < 0 ? null : ctl.notes.get(i)
+            }
+            onNoteChanged: if (visible && note === null) root.detailId = ""
+
+            MouseArea { anchors.fill: parent }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.ToolButton {
+                        icon.name: "go-previous"
+                        onClicked: root.detailId = ""
+                        PlasmaComponents3.ToolTip { text: i18n("Back") }
+                    }
+                    Kirigami.Heading {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.smallSpacing
+                        level: 1
+                        font.weight: 900
+                        text: i18n("Note")
+                    }
+                    NavButton {
+                        iconName: "check-double"
+                        iconSize: Kirigami.Units.iconSizes.smallMedium
+                        wide: false
+                        tip: detailOverlay.note && detailOverlay.note.completed ? i18n("Mark as not completed") : i18n("Mark as completed")
+                        onClicked: ctl.setCompleted(root.detailId, !detailOverlay.note.completed)
+                    }
+                    NavButton {
+                        iconName: "pencil"
+                        iconSize: Kirigami.Units.iconSizes.smallMedium
+                        wide: false
+                        tip: i18n("Edit")
+                        onClicked: root.editNote = { noteId: root.detailId, title: detailOverlay.note.title,
+                                                     description: detailOverlay.note.description, dueDate: detailOverlay.note.dueDate }
+                    }
+                    NavButton {
+                        iconName: "trash-red"
+                        iconSize: Kirigami.Units.iconSizes.smallMedium
+                        wide: false
+                        tip: i18n("Delete")
+                        onClicked: root.confirmNoteId = root.detailId
+                    }
+                }
+
+                Kirigami.Separator { Layout.fillWidth: true }
+
+                PlasmaComponents3.ScrollView {
+                    id: detailScroll
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    contentWidth: availableWidth
+
+                    ColumnLayout {
+                        width: detailScroll.availableWidth
+                        spacing: Kirigami.Units.largeSpacing
+
+                        Kirigami.Heading {
+                            Layout.fillWidth: true
+                            Layout.margins: Kirigami.Units.largeSpacing
+                            Layout.bottomMargin: 0
+                            level: 2
+                            wrapMode: Text.Wrap
+                            textFormat: Text.StyledText
+                            linkColor: Kirigami.Theme.linkColor
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            font.strikeout: detailOverlay.note ? detailOverlay.note.completed : false
+                            text: detailOverlay.note ? root.linkify(detailOverlay.note.title) : ""
+                        }
+
+                        // status, deadline and creation date
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            spacing: Kirigami.Units.smallSpacing
+                            visible: detailOverlay.note !== null && detailOverlay.note.dueDate > 0
+                            readonly property bool overdue: detailOverlay.note !== null && !detailOverlay.note.completed
+                                                            && detailOverlay.note.dueDate < ctl.startOfToday()
+
+                            Image {
+                                source: Qt.resolvedUrl("icons/" + (parent.overdue ? "calendar-alert" : "calendar") + ".png")
+                                sourceSize: Qt.size(Kirigami.Units.iconSizes.smallMedium * 2, Kirigami.Units.iconSizes.smallMedium * 2)
+                                smooth: true
+                                mipmap: true
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            }
+                            PlasmaComponents3.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                                text: detailOverlay.note && detailOverlay.note.dueDate > 0
+                                    ? i18n("Deadline: %1", new Date(detailOverlay.note.dueDate).toLocaleDateString(Qt.locale(), Locale.LongFormat))
+                                    : ""
+                            }
+                        }
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            opacity: 0.7
+                            wrapMode: Text.Wrap
+                            text: detailOverlay.note
+                                ? (detailOverlay.note.completed ? i18n("Completed") + " · " : "")
+                                  + i18n("Created %1", new Date(detailOverlay.note.createdAt).toLocaleDateString(Qt.locale(), Locale.LongFormat))
+                                : ""
+                        }
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        // the whole description, line breaks kept
+                        PlasmaComponents3.Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            Layout.bottomMargin: Kirigami.Units.largeSpacing
+                            wrapMode: Text.Wrap
+                            textFormat: Text.StyledText
+                            linkColor: Kirigami.Theme.linkColor
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                            visible: text !== ""
+                            text: detailOverlay.note ? root.linkify(detailOverlay.note.description).replace(/\n/g, "<br>") : ""
+                        }
+                        // room for more content in the future
+                    }
+                }
+            }
+        }
+
         // ---- New note: a full-window page on top of everything else in the popup ----
         Rectangle {
             id: addOverlay
@@ -1144,14 +1303,14 @@ PlasmoidItem {
         // ---- "Are you sure?" for deleting all completed notes ----
         Rectangle {
             anchors.fill: parent
-            visible: root.confirmDeleteCount > 0
+            visible: root.confirmDeleteCount > 0 || root.confirmNoteId !== ""
             color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)
             z: 20
 
             // swallow clicks so nothing underneath reacts; a click outside the box cancels
             MouseArea {
                 anchors.fill: parent
-                onClicked: root.confirmDeleteCount = 0
+                onClicked: { root.confirmDeleteCount = 0; root.confirmNoteId = "" }
             }
 
             Rectangle {
@@ -1177,7 +1336,9 @@ PlasmoidItem {
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: i18np("Total of %1 completed note will be deleted. This cannot be undone.",
+                        text: root.confirmNoteId !== ""
+                            ? i18n("This note will be deleted. This cannot be undone.")
+                            : i18np("Total of %1 completed note will be deleted. This cannot be undone.",
                                     "Total of %1 completed notes will be deleted. This cannot be undone.",
                                     root.confirmDeleteCount)
                     }
@@ -1187,14 +1348,20 @@ PlasmoidItem {
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.Button {
                             text: i18n("Cancel")
-                            onClicked: root.confirmDeleteCount = 0
+                            onClicked: { root.confirmDeleteCount = 0; root.confirmNoteId = "" }
                         }
                         PlasmaComponents3.Button {
                             text: i18n("Delete all")
                             icon.name: "edit-delete"
                             onClicked: {
-                                ctl.removeCompleted()
+                                if (root.confirmNoteId !== "") {
+                                    ctl.removeNote(root.confirmNoteId)
+                                    root.detailId = ""
+                                } else {
+                                    ctl.removeCompleted()
+                                }
                                 root.confirmDeleteCount = 0
+                                root.confirmNoteId = ""
                             }
                         }
                     }
