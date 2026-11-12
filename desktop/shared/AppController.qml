@@ -185,6 +185,21 @@ Item {
         scheduleSync()
     }
 
+    // Deletes every completed note; returns how many there were.
+    function removeCompleted() {
+        let n = 0
+        for (let i = notes.count - 1; i >= 0; --i) {
+            if (!notes.get(i).completed)
+                continue
+            NoteStore.remove(notes.get(i).noteId)
+            notes.remove(i)
+            ++n
+        }
+        refresh()
+        scheduleSync()
+        return n
+    }
+
     function setCompleted(noteId, completed) {
         NoteStore.setCompleted(noteId, completed)
         const i = indexOfNote(noteId)

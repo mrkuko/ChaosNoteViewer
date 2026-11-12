@@ -17,6 +17,8 @@ PlasmoidItem {
     property bool addOpen: false
     // the note being edited in the same page as "New note"; null = not editing
     property var editNote: null
+    // number of notes the "delete all completed" confirmation is asking about; 0 = not asking
+    property int confirmDeleteCount: 0
 
     // Everything that is not Plasma-specific lives in the shared AppController.qml (notes, account,
     // encryption key, sync). This widget supplies the open/closed state and the source of random numbers.
@@ -165,6 +167,12 @@ PlasmoidItem {
                             checked: ctl.sorted
                             tipEnabled: !sortMenu.visible
                             onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
+                        }
+                        NavButton {
+                            visible: !root.settingsOpen && ctl.filter === 1 && ctl.shown.count > 0
+                            iconName: "trash-red"
+                            tip: i18n("Delete all completed notes")
+                            onClicked: root.confirmDeleteCount = ctl.shown.count
                         }
                         NavButton {
                             visible: !root.settingsOpen
@@ -1127,6 +1135,67 @@ PlasmoidItem {
                             Layout.bottomMargin: Kirigami.Units.largeSpacing
                             value: addOverlay.due
                             onPicked: ms => addOverlay.due = ms
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- "Are you sure?" for deleting all completed notes ----
+        Rectangle {
+            anchors.fill: parent
+            visible: root.confirmDeleteCount > 0
+            color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)
+            z: 20
+
+            // swallow clicks so nothing underneath reacts; a click outside the box cancels
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.confirmDeleteCount = 0
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - Kirigami.Units.gridUnit * 2, Kirigami.Units.gridUnit * 20)
+                height: box.implicitHeight + Kirigami.Units.largeSpacing * 2
+                radius: Kirigami.Units.cornerRadius
+                color: Kirigami.Theme.backgroundColor
+                border.color: Qt.alpha(Kirigami.Theme.textColor, 0.25)
+                MouseArea { anchors.fill: parent }
+
+                ColumnLayout {
+                    id: box
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.largeSpacing
+
+                    Kirigami.Heading {
+                        Layout.fillWidth: true
+                        level: 3
+                        text: i18n("Are you sure?")
+                    }
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: i18np("Total of %1 completed note will be deleted. This cannot be undone.",
+                                    "Total of %1 completed notes will be deleted. This cannot be undone.",
+                                    root.confirmDeleteCount)
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.Button {
+                            text: i18n("Cancel")
+                            onClicked: root.confirmDeleteCount = 0
+                        }
+                        PlasmaComponents3.Button {
+                            text: i18n("Delete all")
+                            icon.name: "edit-delete"
+                            onClicked: {
+                                ctl.removeCompleted()
+                                root.confirmDeleteCount = 0
+                            }
                         }
                     }
                 }
