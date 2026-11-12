@@ -989,6 +989,74 @@ PlasmoidItem {
                     }
                     HoverHandler { id: footerHover }
                 }
+
+                // Sync state, also for the automatic syncs. A click syncs now and the button shows the result.
+                PlasmaComponents3.ToolButton {
+                    id: syncButton
+                    visible: ctl.userEmail !== ""
+                    // "syncing" as shown: stays on for at least a second so a quick sync is still visible
+                    property bool busy: ctl.syncing
+                    Connections {
+                        target: ctl
+                        function onSyncingChanged() {
+                            if (ctl.syncing) {
+                                syncButton.busy = true
+                                minSpin.restart()
+                            } else if (!minSpin.running) {
+                                syncButton.busy = false
+                            }
+                        }
+                    }
+                    Timer {
+                        id: minSpin
+                        interval: 1000
+                        onTriggered: syncButton.busy = ctl.syncing
+                    }
+                    enabled: !busy
+                    flat: true
+                    // Synced blue, Syncing orange, Failed red
+                    readonly property color stateColor: busy ? "#f5a97f" : ctl.syncError !== "" ? Kirigami.Theme.negativeTextColor : "#8aadf4"
+                    readonly property string stateText: busy ? i18n("Syncing") : ctl.syncError !== "" ? i18n("Failed") : i18n("Synced")
+                    onClicked: ctl.keyPhase === "" ? ctl.startKeyFlow() : ctl.syncNow()
+                    Accessible.name: stateText
+
+                    contentItem: Row {
+                        spacing: Kirigami.Units.smallSpacing
+                        Image {
+                            id: syncIcon
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Kirigami.Units.iconSizes.smallMedium
+                            height: width
+                            source: Qt.resolvedUrl("icons/sync-arrows.png")
+                            sourceSize: Qt.size(width * 2, width * 2)
+                            smooth: true
+                            mipmap: true
+                            RotationAnimator on rotation {
+                                id: spin
+                                from: 0
+                                to: 360
+                                duration: 1000
+                                loops: Animation.Infinite
+                                running: syncButton.busy
+                            }
+                            // back upright when it stops
+                            Connections {
+                                target: syncButton
+                                function onBusyChanged() { if (!syncButton.busy) syncIcon.rotation = 0 }
+                            }
+                        }
+                        PlasmaComponents3.Label {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: syncButton.stateText
+                            color: syncButton.stateColor
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        }
+                    }
+                    PlasmaComponents3.ToolTip {
+                        visible: syncButton.hovered
+                        text: ctl.syncError !== "" ? ctl.syncError : i18n("Sync now")
+                    }
+                }
             }
         }
 
