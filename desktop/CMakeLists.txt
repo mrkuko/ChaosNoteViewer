@@ -45,6 +45,9 @@ endforeach()
 
 qt_add_executable(chaosnoteviewer src/main.cpp)
 
+# Theme.qml is a singleton (colors and sizes of the tray UI)
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(chaosnoteviewer
     URI ChaosNotes
     VERSION 1.0
@@ -55,7 +58,14 @@ qt_add_qml_module(chaosnoteviewer
         src/SecureRandom.cpp
     QML_FILES
         qml/Main.qml
-        qml/NoteDelegate.qml
+        qml/ConfirmBox.qml
+        qml/DeadlineCalendar.qml
+        qml/DetailPage.qml
+        qml/EditPage.qml
+        qml/NavButton.qml
+        qml/NotesList.qml
+        qml/SettingsPage.qml
+        qml/Theme.qml
         qml/TrayController.qml
         ${SHARED_FILES}
     RESOURCES

@@ -1419,7 +1419,7 @@ PlasmoidItem {
                             onClicked: { root.confirmDeleteCount = 0; root.confirmNoteId = "" }
                         }
                         PlasmaComponents3.Button {
-                            text: i18n("Delete all")
+                            text: root.confirmNoteId !== "" ? i18n("Delete") : i18n("Delete all")
                             icon.name: "edit-delete"
                             onClicked: {
                                 if (root.confirmNoteId !== "") {
