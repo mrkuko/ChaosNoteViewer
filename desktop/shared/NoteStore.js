@@ -106,6 +106,14 @@ function remove(noteId) {
     })
 }
 
+// Changes the text and deadline of a note (dueDate: ms since epoch, 0 = none).
+function update(noteId, title, description, dueDate) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET title = ?, description = ?, due_date = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            [title, description, dueDate > 0 ? dueDate : null, Date.now(), noteId])
+    })
+}
+
 function setCompleted(noteId, completed) {
     db().transaction(function (tx) {
         tx.executeSql("UPDATE notes SET completed = ?, updated_at = ?, dirty = 1 WHERE id = ?",

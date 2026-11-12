@@ -15,6 +15,8 @@ PlasmoidItem {
     // UI state of this launcher
     property bool settingsOpen: false
     property bool addOpen: false
+    // the note being edited in the same page as "New note"; null = not editing
+    property var editNote: null
 
     // Everything that is not Plasma-specific lives in the shared AppController.qml (notes, account,
     // encryption key, sync). This widget supplies the open/closed state and the source of random numbers.
@@ -425,6 +427,18 @@ PlasmoidItem {
                                             opacity: hover.hovered ? 1 : 0
                                             enabled: hover.hovered
                                             onClicked: ctl.removeNote(model.noteId)
+                                        }
+
+                                        NavButton {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            iconName: "pencil"
+                                            iconSize: Kirigami.Units.iconSizes.smallMedium
+                                            wide: false
+                                            tip: i18n("Edit")
+                                            opacity: hover.hovered ? 1 : 0
+                                            enabled: hover.hovered
+                                            onClicked: root.editNote = { noteId: model.noteId, title: model.title,
+                                                                         description: model.description, dueDate: model.dueDate }
                                         }
 
                                         // shown only while the pointer is on the note; completed notes are already
@@ -948,25 +962,35 @@ PlasmoidItem {
         Rectangle {
             id: addOverlay
             anchors.fill: parent
-            visible: root.addOpen
+            visible: root.addOpen || root.editNote !== null
             color: Kirigami.Theme.backgroundColor
             z: 10
 
             property double due: 0
 
+            readonly property bool editing: root.editNote !== null
+
+            function close() {
+                root.addOpen = false
+                root.editNote = null
+            }
+
             function submit() {
                 const title = titleField.text.trim()
                 if (title === "")
                     return
-                ctl.addNote(title, descField.text.trim(), due)
-                root.addOpen = false
+                if (editing)
+                    ctl.updateNote(root.editNote.noteId, title, descField.text.trim(), due)
+                else
+                    ctl.addNote(title, descField.text.trim(), due)
+                close()
             }
 
             onVisibleChanged: if (visible) {
-                titleField.text = ""
-                descField.text = ""
-                due = 0
-                calendar.showMonthOf(0)
+                titleField.text = editing ? root.editNote.title : ""
+                descField.text = editing ? root.editNote.description : ""
+                due = editing ? root.editNote.dueDate : 0
+                calendar.showMonthOf(due)
                 titleField.forceActiveFocus()
             }
 
@@ -984,18 +1008,18 @@ PlasmoidItem {
 
                     PlasmaComponents3.ToolButton {
                         icon.name: "go-previous"
-                        onClicked: root.addOpen = false
+                        onClicked: addOverlay.close()
                         PlasmaComponents3.ToolTip { text: i18n("Cancel") }
                     }
                     Kirigami.Heading {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.smallSpacing
                         level: 3
-                        text: i18n("New note")
+                        text: addOverlay.editing ? i18n("Edit note") : i18n("New note")
                     }
                     PlasmaComponents3.Button {
-                        text: i18n("Add")
-                        icon.name: "list-add"
+                        text: addOverlay.editing ? i18n("Save") : i18n("Add")
+                        icon.name: addOverlay.editing ? "document-save" : "list-add"
                         enabled: titleField.text.trim() !== ""
                         onClicked: addOverlay.submit()
                     }
@@ -1020,7 +1044,7 @@ PlasmoidItem {
                             Layout.bottomMargin: 0
                             placeholderText: i18n("Title")
                             onAccepted: descField.forceActiveFocus()
-                            Keys.onEscapePressed: root.addOpen = false
+                            Keys.onEscapePressed: addOverlay.close()
                         }
                         PlasmaComponents3.TextArea {
                             id: descField
@@ -1030,7 +1054,7 @@ PlasmoidItem {
                             Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                             placeholderText: i18n("Description (optional)")
                             wrapMode: TextEdit.Wrap
-                            Keys.onEscapePressed: root.addOpen = false
+                            Keys.onEscapePressed: addOverlay.close()
                             Keys.onPressed: event => {
                                 if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                                         && (event.modifiers & Qt.ControlModifier)) {

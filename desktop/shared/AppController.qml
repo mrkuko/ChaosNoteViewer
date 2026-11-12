@@ -164,6 +164,18 @@ Item {
         scheduleSync()
     }
 
+    function updateNote(noteId, title, description, dueDate) {
+        NoteStore.update(noteId, title, description, dueDate)
+        const i = indexOfNote(noteId)
+        if (i >= 0) {
+            notes.setProperty(i, "title", title)
+            notes.setProperty(i, "description", description)
+            notes.setProperty(i, "dueDate", dueDate)
+        }
+        refresh()
+        scheduleSync()
+    }
+
     function removeNote(noteId) {
         NoteStore.remove(noteId)
         const i = indexOfNote(noteId)
