@@ -77,7 +77,12 @@ def generate_firebase_config(local, rc, fb, out):
           "var emulator = " + json.dumps(emulator) + "\n"
           "var authUrl = " + json.dumps(auth) + "\n"
           "var tokenUrl = " + json.dumps(token) + "\n"
-          "var firestoreUrl = " + json.dumps(firestore) + "\n")
+          "var firestoreUrl = " + json.dumps(firestore) + "\n\n"
+          "// the key can also be entered in the app (Settings); it replaces the built-in one at runtime\n"
+          "function setApiKey(key) {\n"
+          "    apiKey = key\n"
+          "    configured = key !== \"\"\n"
+          "}\n")
     print("generated", out, "(emulator)" if emulator else "(real project)" if api_key else "(no API key: sign-in disabled)")
 
 

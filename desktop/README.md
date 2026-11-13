@@ -35,7 +35,9 @@ because the widget cannot read `core/` at runtime. Run it again after every chan
 ### Sign-in (Firebase)
 
 The widget works without an account. To sign in and sync, give it your Firebase Web API key
-(Firebase console, Project settings, General, Your apps). The key is not committed:
+(Firebase console, Project settings, General, Your apps). On first open the app asks for it
+(Settings, Firebase API key, with an Edit button afterwards); it is kept in the local database.
+Alternatively, a key can be built in as the default, and it is not committed:
 
 ```
 cp firebase.local.example.json firebase.local.json     # then paste the apiKey into it

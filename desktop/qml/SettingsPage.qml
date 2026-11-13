@@ -29,6 +29,74 @@ ScrollView {
         width: page.availableWidth
         spacing: Theme.large
 
+        // ---- Firebase API key: entered here, kept on this device ----
+        Label {
+            Layout.leftMargin: Theme.large
+            Layout.rightMargin: Theme.large
+            Layout.topMargin: Theme.large
+            font.pointSize: 12
+            font.bold: true
+            text: qsTr("Firebase API key")
+        }
+        ColumnLayout {
+            id: keyBox
+            // editing while there is no key yet (first run) or after pressing Edit
+            property bool editing: !ctl.configured
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.large
+            Layout.rightMargin: Theme.large
+            spacing: Theme.small
+
+            Connections {
+                target: ctl
+                function onConfiguredChanged() { keyBox.editing = !ctl.configured }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                opacity: 0.7
+                text: keyBox.editing
+                    ? qsTr("Needed to sign in and sync. Paste the Web API key from the Firebase console (Project settings, General, Your apps). Without it the notes stay on this device only.")
+                    : qsTr("Key set: %1").arg(ctl.apiKey.length > 8 ? "…" + ctl.apiKey.slice(-4) : "••••")
+            }
+            TextField {
+                id: apiKeyField
+                Layout.fillWidth: true
+                visible: keyBox.editing
+                placeholderText: qsTr("Web API key")
+                text: ctl.apiKey
+                onAccepted: saveKeyButton.clicked()
+            }
+            RowLayout {
+                spacing: Theme.small
+                Button {
+                    id: saveKeyButton
+                    visible: keyBox.editing
+                    text: qsTr("Save")
+                    enabled: apiKeyField.text.trim() !== ""
+                    onClicked: if (enabled) { ctl.setApiKey(apiKeyField.text); keyBox.editing = false }
+                }
+                Button {
+                    flat: true
+                    visible: keyBox.editing && ctl.configured
+                    text: qsTr("Cancel")
+                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = false }
+                }
+                Button {
+                    flat: true
+                    visible: keyBox.editing && !ctl.configured && !ctl.setupSeen
+                    text: qsTr("Skip for now")
+                    onClicked: { ctl.skipSetup(); page.app.settingsOpen = false }
+                }
+                Button {
+                    visible: !keyBox.editing
+                    text: qsTr("Edit")
+                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = true }
+                }
+            }
+        }
+
         Label {
             Layout.margins: Theme.large
             font.pointSize: 12
@@ -337,7 +405,7 @@ ScrollView {
                 opacity: 0.7
                 text: ctl.configured
                     ? qsTr("Notes are stored on this device. Sign in to sync them between devices.")
-                    : qsTr("Notes are stored on this device. Sign-in is not set up: add your Firebase API key to desktop/firebase.local.json and build again.")
+                    : qsTr("Notes are stored on this device. Sign-in is not set up: enter your Firebase API key above.")
             }
 
             TextField {

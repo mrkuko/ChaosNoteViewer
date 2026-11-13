@@ -35,8 +35,31 @@ Item {
 
     function keyText() { return KeyFlow.keyText() }
 
-    // false when this build has no Firebase API key, then there is nothing to sign in to
-    readonly property bool configured: FirebaseConfig.configured
+    // false while there is no Firebase API key, then there is nothing to sign in to. The key is entered
+    // in the app (Settings, or the first-run setup) and kept in this device's database; a key built in
+    // from desktop/firebase.local.json is the default.
+    property bool configured: FirebaseConfig.configured
+    property string apiKey: FirebaseConfig.apiKey
+    // the first-run setup was shown (and saved or skipped), so the app opens on the notes from now on
+    property bool setupSeen: true
+
+    function setApiKey(key) {
+        key = key.trim()
+        NoteStore.setState("api_key", key)
+        FirebaseConfig.setApiKey(key)
+        apiKey = key
+        configured = key !== ""
+        authError = ""
+        setupSeen = true
+        NoteStore.setState("setup_seen", "1")
+        if (configured && userEmail !== "" && idToken === "")
+            restoreSession()
+    }
+
+    function skipSetup() {
+        setupSeen = true
+        NoteStore.setState("setup_seen", "1")
+    }
 
     // Which notes the list shows: 0 = open (default), 1 = completed, 2 = all,
     // 3 = important (open and overdue or due within IMPORTANT_DAYS days, today included).
@@ -659,6 +682,13 @@ Item {
     }
 
     Component.onCompleted: {
+        const savedKey = NoteStore.getState("api_key")
+        if (savedKey !== "") {
+            FirebaseConfig.setApiKey(savedKey)
+            apiKey = savedKey
+            configured = true
+        }
+        setupSeen = configured || NoteStore.getState("setup_seen") === "1"
         const savedField = parseInt(NoteStore.getState("sort_field"), 10)
         if (savedField >= 0 && savedField < sortFieldNames.length) {
             sortDesc = NoteStore.getState("sort_desc") === "1"

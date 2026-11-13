@@ -21,7 +21,7 @@ ApplicationWindow {
     onActiveChanged: if (!active) hide()
 
     // UI state of this launcher
-    property bool settingsOpen: false
+    property bool settingsOpen: !ctl.setupSeen   // first run opens on the API key setup
     property bool addOpen: false
     // the note being edited in the same page as "New note"; null = not editing
     property var editNote: null

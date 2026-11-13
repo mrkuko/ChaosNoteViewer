@@ -13,7 +13,7 @@ PlasmoidItem {
     toolTipMainText: i18n("Chaos Note Viewer")
 
     // UI state of this launcher
-    property bool settingsOpen: false
+    property bool settingsOpen: !ctl.setupSeen   // first run opens on the API key setup
     property bool addOpen: false
     // the note being edited in the same page as "New note"; null = not editing
     property var editNote: null
@@ -548,6 +548,74 @@ PlasmoidItem {
                         ColumnLayout {
                             spacing: Kirigami.Units.largeSpacing
 
+                        // ---- Firebase API key: entered here, kept on this device ----
+                        PlasmaComponents3.Label {
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            Layout.topMargin: Kirigami.Units.largeSpacing
+                            font.bold: true
+                            text: i18n("Firebase API key")
+                        }
+                        ColumnLayout {
+                            id: keyBox
+                            // editing while there is no key yet (first run) or after pressing Edit
+                            property bool editing: !ctl.configured
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Connections {
+                                target: ctl
+                                function onConfiguredChanged() { keyBox.editing = !ctl.configured }
+                            }
+
+                            PlasmaComponents3.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                opacity: 0.7
+                                text: keyBox.editing
+                                    ? i18n("Needed to sign in and sync. Paste the Web API key from the Firebase console (Project settings, General, Your apps). Without it the notes stay on this device only.")
+                                    : i18n("Key set: %1", ctl.apiKey.length > 8 ? "…" + ctl.apiKey.slice(-4) : "••••")
+                            }
+                            PlasmaComponents3.TextField {
+                                id: apiKeyField
+                                Layout.fillWidth: true
+                                visible: keyBox.editing
+                                placeholderText: i18n("Web API key")
+                                text: ctl.apiKey
+                                onAccepted: saveKeyButton.clicked()
+                            }
+                            RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+                                PlasmaComponents3.Button {
+                                    id: saveKeyButton
+                                    visible: keyBox.editing
+                                    text: i18n("Save")
+                                    enabled: apiKeyField.text.trim() !== ""
+                                    onClicked: if (enabled) { ctl.setApiKey(apiKeyField.text); keyBox.editing = false }
+                                }
+                                PlasmaComponents3.Button {
+                                    flat: true
+                                    visible: keyBox.editing && ctl.configured
+                                    text: i18n("Cancel")
+                                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = false }
+                                }
+                                PlasmaComponents3.Button {
+                                    flat: true
+                                    visible: keyBox.editing && !ctl.configured && !ctl.setupSeen
+                                    text: i18n("Skip for now")
+                                    onClicked: { ctl.skipSetup(); root.settingsOpen = false }
+                                }
+                                PlasmaComponents3.Button {
+                                    visible: !keyBox.editing
+                                    text: i18n("Edit")
+                                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = true }
+                                }
+                            }
+                        }
+
+
                             Kirigami.Heading {
                                 Layout.margins: Kirigami.Units.largeSpacing
                                 level: 4
@@ -865,7 +933,7 @@ PlasmoidItem {
                                     opacity: 0.7
                                     text: ctl.configured
                                         ? i18n("Notes are stored on this device. Sign in to sync them between devices.")
-                                        : i18n("Notes are stored on this device. Sign-in is not set up: add your Firebase API key to desktop/firebase.local.json and run install.sh.")
+                                        : i18n("Notes are stored on this device. Sign-in is not set up: enter your Firebase API key above.")
                                 }
 
                                 PlasmaComponents3.TextField {
