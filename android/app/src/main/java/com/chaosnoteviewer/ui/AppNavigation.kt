@@ -1,6 +1,7 @@
 package com.chaosnoteviewer.ui
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,10 +26,13 @@ object Routes {
 @Composable
 fun AppNavigation() {
     val nav = rememberNavController()
+    // one NotesViewModel for the whole app, shared by all screens
+    val vm: NotesViewModel = viewModel(factory = NotesViewModel.Factory)
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {
             NotesListScreen(
+                vm = vm,
                 onOpenNote = { nav.navigate(Routes.detail(it)) },
                 onNewNote = { nav.navigate(Routes.edit()) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
@@ -37,6 +41,7 @@ fun AppNavigation() {
         composable(Routes.DETAIL, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             val id = entry.arguments?.getString("id").orEmpty()
             DetailScreen(
+                vm = vm,
                 noteId = id,
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.edit(id)) },
@@ -47,6 +52,7 @@ fun AppNavigation() {
             arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { entry ->
             EditScreen(
+                vm = vm,
                 noteId = entry.arguments?.getString("id"),
                 onDone = { nav.popBackStack() },
             )
