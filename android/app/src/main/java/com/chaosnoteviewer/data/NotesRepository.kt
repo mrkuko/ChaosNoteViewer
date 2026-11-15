@@ -10,7 +10,7 @@ import java.util.UUID
 class NotesRepository(
     private val db: AppDatabase,
     private val now: () -> Long = System::currentTimeMillis,
-) {
+) : com.chaosnoteviewer.account.AccountStore {
     private val notes = db.notes()
     private val state = db.syncState()
 
@@ -77,7 +77,10 @@ class NotesRepository(
         notes.alive().forEachIndexed { i, n -> notes.setPosition(n.id, (i + 1).toDouble(), t) }
     }
 
-    suspend fun getState(key: String): String = state.get(key) ?: ""
-    suspend fun setState(key: String, value: String) = state.set(SyncStateEntity(key, value))
+    override suspend fun claimNotes(uid: String) = notes.claim(uid, now())
+    override suspend fun rebindNotes(oldUid: String, newUid: String) = notes.rebind(oldUid, newUid, now())
+
+    override suspend fun getState(key: String): String = state.get(key) ?: ""
+    override suspend fun setState(key: String, value: String) = state.set(SyncStateEntity(key, value))
     suspend fun clearState(key: String) = state.clear(key)
 }

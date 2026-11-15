@@ -129,6 +129,29 @@ class NotesRepositoryTest {
         assertEquals(1.0, repo.get(a.id)!!.position, 0.0)
     }
 
+    @Test fun claimNotesGivesUnownedNotesToTheAccountAndQueuesThem() = runTest {
+        val a = repo.add("a"); val b = repo.add("b")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET dirty = 0, author_id = 'other' WHERE id = '${b.id}'")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET dirty = 0 WHERE id = '${a.id}'")
+        clock = 6_000L
+        repo.claimNotes("uid-1")
+        assertEquals("uid-1", repo.get(a.id)!!.authorId)
+        assertTrue(repo.get(a.id)!!.dirty)
+        assertEquals(6_000L, repo.get(a.id)!!.updatedAt)
+        assertEquals("other", repo.get(b.id)!!.authorId)         // somebody else's note is left alone
+        assertFalse(repo.get(b.id)!!.dirty)
+    }
+
+    @Test fun rebindNotesMovesNotesToTheNewUid() = runTest {
+        val a = repo.add("a"); val b = repo.add("b")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET author_id = 'old' WHERE id = '${a.id}'")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET author_id = 'other', dirty = 0 WHERE id = '${b.id}'")
+        repo.rebindNotes("old", "new")
+        assertEquals("new", repo.get(a.id)!!.authorId)
+        assertTrue(repo.get(a.id)!!.dirty)
+        assertEquals("other", repo.get(b.id)!!.authorId)
+    }
+
     @Test fun stateKeyValue() = runTest {
         assertEquals("", repo.getState(StateKeys.UID))
         repo.setState(StateKeys.UID, "u1")

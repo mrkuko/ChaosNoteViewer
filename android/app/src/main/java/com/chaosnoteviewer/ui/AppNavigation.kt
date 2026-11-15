@@ -28,6 +28,8 @@ fun AppNavigation() {
     val nav = rememberNavController()
     // one NotesViewModel for the whole app, shared by all screens
     val vm: NotesViewModel = viewModel(factory = NotesViewModel.Factory)
+    // created here, so the remembered sign-in is picked up as soon as the app starts
+    val accountVm: AccountViewModel = viewModel(factory = AccountViewModel.Factory)
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {
@@ -58,7 +60,7 @@ fun AppNavigation() {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(onBack = { nav.popBackStack() })
+            SettingsScreen(vm = accountVm, onBack = { nav.popBackStack() })
         }
     }
 }

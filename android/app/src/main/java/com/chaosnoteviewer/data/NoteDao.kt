@@ -43,6 +43,13 @@ interface NoteDao {
     @Query("UPDATE notes SET deleted_at = :now, updated_at = :now, dirty = 1 WHERE id = :id")
     suspend fun markDeleted(id: String, now: Long)
 
+    // notes written before any sign-in belong to the first account that signs in
+    @Query("UPDATE notes SET author_id = :uid, updated_at = :now, dirty = 1 WHERE author_id IS NULL")
+    suspend fun claim(uid: String, now: Long)
+
+    @Query("UPDATE notes SET author_id = :newUid, updated_at = :now, dirty = 1 WHERE author_id = :oldUid")
+    suspend fun rebind(oldUid: String, newUid: String, now: Long)
+
     @Query("SELECT id FROM notes WHERE deleted_at IS NULL AND completed = 1")
     suspend fun completedIds(): List<String>
 }
