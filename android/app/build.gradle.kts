@@ -23,7 +23,7 @@ android {
     defaultConfig {
         // permanent: Firebase registers the app under this id
         applicationId = "com.chaosnoteviewer"
-        minSdk = 26        // Android 8.0
+        minSdk = 28        // Android 9: the platform has ChaCha20-Poly1305 from here on (crypto/NoteCrypto.kt)
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
@@ -49,6 +49,10 @@ android {
 
     // the instrumented tests build a database from the canonical SQL migrations to check the Room schema
     sourceSets["androidTest"].assets.directories.add("../../core/storage/migrations")
+    // the shared encryption test vectors (core/crypto/vectors.json) are checked on the PC and on the phone
+    sourceSets["androidTest"].assets.directories.add("../../core/crypto")
+    sourceSets["test"].kotlin.directories.add("src/sharedTest/java")
+    sourceSets["androidTest"].kotlin.directories.add("src/sharedTest/java")
 
     buildFeatures {
         compose = true
@@ -83,6 +87,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)

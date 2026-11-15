@@ -7,9 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 // The part of the database the account rules touch (NotesRepository implements it).
-interface AccountStore {
-    suspend fun getState(key: String): String
-    suspend fun setState(key: String, value: String)
+interface AccountStore : com.chaosnoteviewer.data.StateStore {
     // notes written before any sign-in (author_id null) now belong to [uid]
     suspend fun claimNotes(uid: String)
     // the account these notes belonged to was deleted and the same email registered again

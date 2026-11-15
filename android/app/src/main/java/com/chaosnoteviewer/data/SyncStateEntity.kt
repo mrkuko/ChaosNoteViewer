@@ -10,6 +10,13 @@ data class SyncStateEntity(
     val value: String,
 )
 
+// Reads and writes the key/value table sync_state.
+interface StateStore {
+    // "" when there is no such key
+    suspend fun getState(key: String): String
+    suspend fun setState(key: String, value: String)
+}
+
 // Keys used in sync_state, the same ones the desktop app uses.
 object StateKeys {
     const val UID = "uid"
@@ -19,4 +26,8 @@ object StateKeys {
     const val CURSOR_ID = "cursor_id"
     const val SORT_FIELD = "sort_field"
     const val SORT_DESC = "sort_desc"
+    // the encryption key of the cloud copy, wrapped by the Android Keystore (crypto/KeyStorage.kt), and whether
+    // the user saw it and confirmed they saved it; same names as on desktop, other content
+    const val ENC_KEY = "enc_key"
+    const val KEY_CONFIRMED = "key_confirmed"
 }
