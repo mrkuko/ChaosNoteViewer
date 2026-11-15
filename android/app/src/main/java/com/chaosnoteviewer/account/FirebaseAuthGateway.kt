@@ -36,6 +36,11 @@ class FirebaseAuthGateway(private val auth: FirebaseAuth) : AuthGateway {
         }
     }
 
+    override suspend fun idToken(forceRefresh: Boolean): String = call(sessionLostOnUnknownUser = true) {
+        val user = auth.currentUser ?: throw AuthException("USER_NOT_FOUND", sessionLost = true)
+        user.getIdToken(forceRefresh).await().token ?: throw AuthException("USER_NOT_FOUND", sessionLost = true)
+    }
+
     override suspend fun sendVerification() = call {
         (auth.currentUser ?: throw AuthException("USER_NOT_FOUND", sessionLost = true)).sendEmailVerification().await()
         Unit

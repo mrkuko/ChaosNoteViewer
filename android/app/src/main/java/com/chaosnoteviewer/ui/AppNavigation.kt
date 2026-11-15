@@ -30,11 +30,13 @@ fun AppNavigation() {
     val vm: NotesViewModel = viewModel(factory = NotesViewModel.Factory)
     // created here, so the remembered sign-in is picked up as soon as the app starts
     val accountVm: AccountViewModel = viewModel(factory = AccountViewModel.Factory)
+    val syncVm: SyncViewModel = viewModel(factory = SyncViewModel.Factory)
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {
             NotesListScreen(
                 vm = vm,
+                syncVm = syncVm,
                 onOpenNote = { nav.navigate(Routes.detail(it)) },
                 onNewNote = { nav.navigate(Routes.edit()) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
@@ -44,6 +46,7 @@ fun AppNavigation() {
             val id = entry.arguments?.getString("id").orEmpty()
             DetailScreen(
                 vm = vm,
+                syncVm = syncVm,
                 noteId = id,
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.edit(id)) },
@@ -60,7 +63,7 @@ fun AppNavigation() {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(vm = accountVm, onBack = { nav.popBackStack() })
+            SettingsScreen(vm = accountVm, syncVm = syncVm, onBack = { nav.popBackStack() })
         }
     }
 }

@@ -12,7 +12,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.security.KeyStore
-import com.chaosnoteviewer.data.StateStore
 
 // The real Android Keystore of this device (and the platform's ChaCha20-Poly1305).
 @RunWith(AndroidJUnit4::class)
@@ -69,8 +68,3 @@ class AndroidKeystoreWrapperTest {
     }
 }
 
-private class MemoryState : StateStore {
-    val map = mutableMapOf<String, String>()
-    override suspend fun getState(key: String) = map[key] ?: ""
-    override suspend fun setState(key: String, value: String) { map[key] = value }
-}

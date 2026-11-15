@@ -18,6 +18,10 @@ interface AuthGateway {
     // asks the server for the user again (email verified? account still there?) and refreshes the id token
     suspend fun reload(): AuthUser?
 
+    // The Firebase id token for the cloud calls; [forceRefresh] when the server said the old one expired.
+    // Throws AuthException (sessionLost) when nobody is signed in any more.
+    suspend fun idToken(forceRefresh: Boolean): String
+
     suspend fun sendVerification()
     suspend fun sendPasswordReset(email: String)
     fun signOut()

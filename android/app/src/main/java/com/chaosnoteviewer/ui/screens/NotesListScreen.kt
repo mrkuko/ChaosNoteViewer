@@ -68,14 +68,20 @@ import com.chaosnoteviewer.data.NoteQuery
 import com.chaosnoteviewer.data.SortField
 import com.chaosnoteviewer.ui.ListState
 import com.chaosnoteviewer.ui.NotesViewModel
+import com.chaosnoteviewer.ui.SyncViewModel
+import com.chaosnoteviewer.sync.KeyPhase
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
 import com.chaosnoteviewer.ui.linkify
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesListScreen(vm: NotesViewModel, onOpenNote: (String) -> Unit, onNewNote: () -> Unit, onOpenSettings: () -> Unit) {
+fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (String) -> Unit, onNewNote: () -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.list.collectAsStateWithLifecycle()
+    val sync by syncVm.state.collectAsStateWithLifecycle()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var sortMenu by remember { mutableStateOf(false) }
@@ -127,6 +133,22 @@ fun NotesListScreen(vm: NotesViewModel, onOpenNote: (String) -> Unit, onNewNote:
                         }
                     },
                     actions = {
+                        // sync: only when signed in; while the key is not ready it leads to the key in Settings
+                        if (sync.signedIn)
+                            IconButton(
+                                onClick = { if (sync.phase == KeyPhase.Ready) syncVm.sync() else onOpenSettings() },
+                                enabled = !sync.syncing,
+                            ) {
+                                if (sync.syncing)
+                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                else
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        contentDescription = "Sync",
+                                        tint = if (sync.syncError.isNotEmpty() || sync.phase != KeyPhase.Ready) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurface,
+                                    )
+                            }
                         Box {
                             IconButton(onClick = { sortMenu = true }) {
                                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Sort")
@@ -273,6 +295,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
                     NoteRow(
                         note = note,
                         startOfToday = state.startOfToday,
+                        missing = note.id in state.missing,
                         onOpen = { onOpenNote(note.id) },
                         onCompleted = { vm.setCompleted(note.id, it) },
                         handle = if (state.sorted) null else {
@@ -309,6 +332,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
 private fun NoteRow(
     note: NoteEntity,
     startOfToday: Long,
+    missing: Boolean,
     onOpen: () -> Unit,
     onCompleted: (Boolean) -> Unit,
     handle: (@Composable () -> Unit)?,
@@ -326,9 +350,18 @@ private fun NoteRow(
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        supportingContent = if (note.description.isEmpty() && note.dueDate == null) null else {
+        supportingContent = if (note.description.isEmpty() && note.dueDate == null && !missing) null else {
             {
                 Column {
+                    if (missing)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                            Text(
+                                " Not in the cloud any more",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     if (note.description.isNotEmpty())
                         Text(linkify(note.description, link), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (note.dueDate != null)

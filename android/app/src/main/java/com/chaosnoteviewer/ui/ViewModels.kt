@@ -13,7 +13,9 @@ import com.chaosnoteviewer.data.NoteQuery
 import com.chaosnoteviewer.data.NotesRepository
 import com.chaosnoteviewer.data.SortField
 import com.chaosnoteviewer.data.StateKeys
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,12 +36,14 @@ data class ListState(
     val desc: Boolean = false,
     val startOfToday: Long = NoteQuery.startOfToday(),
     val loaded: Boolean = false,
+    // notes the cloud no longer has (deleted on another device), shown with a warning
+    val missing: Set<String> = emptySet(),
 ) {
     val sorted: Boolean get() = sort != SortField.OWN
     val sortText: String get() = if (sorted) "${sort.label}: ${if (desc) sort.descending else sort.ascending}" else sort.label
 }
 
-class NotesViewModel(private val repo: NotesRepository) : ViewModel() {
+class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String>>) : ViewModel() {
     private val filter = MutableStateFlow(NoteFilter.OPEN)
     private val sort = MutableStateFlow(SortField.OWN to false)
 
@@ -55,13 +59,13 @@ class NotesViewModel(private val repo: NotesRepository) : ViewModel() {
         }
     }.distinctUntilChanged()
 
-    val list: StateFlow<ListState> = combine(repo.alive, filter, sort, today) { all, f, (s, d), today ->
+    val list: StateFlow<ListState> = combine(repo.alive, filter, sort, today, missing) { all, f, (s, d), today, gone ->
         ListState(
             shown = NoteQuery.shown(all, f, s, d, today),
             total = all.size,
             completedCount = all.count { it.completed },
             counts = NoteFilter.entries.associateWith { fl -> all.count { NoteQuery.matches(it, fl, today) } },
-            filter = f, sort = s, desc = d, startOfToday = today, loaded = true,
+            filter = f, sort = s, desc = d, startOfToday = today, loaded = true, missing = gone,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListState())
 
@@ -102,7 +106,10 @@ class NotesViewModel(private val repo: NotesRepository) : ViewModel() {
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer { NotesViewModel((this[APPLICATION_KEY] as ChaosApp).notes) }
+            initializer {
+                val app = this[APPLICATION_KEY] as ChaosApp
+                NotesViewModel(app.notes, app.sync.state.map { it.missing })
+            }
         }
     }
 }

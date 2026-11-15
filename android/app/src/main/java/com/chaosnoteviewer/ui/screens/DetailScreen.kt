@@ -37,14 +37,21 @@ import com.chaosnoteviewer.data.NoteEntity
 import com.chaosnoteviewer.data.NoteQuery
 import com.chaosnoteviewer.ui.Dates
 import com.chaosnoteviewer.ui.NotesViewModel
+import com.chaosnoteviewer.ui.SyncViewModel
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
 import com.chaosnoteviewer.ui.linkify
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(vm: NotesViewModel, noteId: String, onBack: () -> Unit, onEdit: () -> Unit) {
+fun DetailScreen(vm: NotesViewModel, syncVm: SyncViewModel, noteId: String, onBack: () -> Unit, onEdit: () -> Unit) {
     // Unloaded = still reading; null afterwards = the note is gone (deleted), leave the page.
     val note by remember(noteId) { vm.observe(noteId) }.collectAsStateWithLifecycle(Unloaded)
     var confirmDelete by remember { mutableStateOf(false) }
+    val sync by syncVm.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(note) {
         if (note == null || note?.deletedAt != null) onBack()
@@ -66,6 +73,32 @@ fun DetailScreen(vm: NotesViewModel, noteId: String, onBack: () -> Unit, onEdit:
         if (n == null || n === Unloaded) return@Scaffold
         val link = MaterialTheme.colorScheme.primary
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            // deleted on another device: the cloud has no copy, the user decides
+            if (n.id in sync.missing)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(
+                                "  Not in the cloud any more",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                        Text(
+                            "It was deleted on another device. Keep it by uploading it again, or delete it here too.",
+                            Modifier.padding(top = 4.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Row {
+                            TextButton(onClick = { syncVm.reuploadNote(n.id) }) { Text("Upload again") }
+                            TextButton(onClick = { confirmDelete = true }) { Text("Delete here") }
+                        }
+                    }
+                }
             Text(
                 linkify(n.title, link),
                 style = MaterialTheme.typography.headlineSmall,

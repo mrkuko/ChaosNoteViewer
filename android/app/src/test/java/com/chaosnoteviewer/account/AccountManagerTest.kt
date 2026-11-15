@@ -55,6 +55,7 @@ private class FakeAuth : AuthGateway {
         return signedIn?.let { user(it) }
     }
 
+    override suspend fun idToken(forceRefresh: Boolean) = "token-${signedIn ?: "nobody"}"
     override suspend fun sendVerification() { verificationsSent++ }
     override suspend fun sendPasswordReset(email: String) {
         if (email !in accounts) throw AuthException("RESET_EMAIL_NOT_FOUND")

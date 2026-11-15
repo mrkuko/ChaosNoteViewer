@@ -50,6 +50,51 @@ interface NoteDao {
     @Query("UPDATE notes SET author_id = :newUid, updated_at = :now, dirty = 1 WHERE author_id = :oldUid")
     suspend fun rebind(oldUid: String, newUid: String, now: Long)
 
+    // ---- sync (see sync/SyncEngine.kt) ----
+
+    // changed here and not pushed yet, deleted notes included
+    @Query("SELECT * FROM notes WHERE dirty = 1 ORDER BY updated_at ASC")
+    suspend fun dirtyRows(): List<NoteEntity>
+
+    // stays dirty when the note was edited meanwhile (updated_at differs)
+    @Query("UPDATE notes SET dirty = 0, remote_updated_at = :remoteMs WHERE id = :id AND updated_at = :updatedAt")
+    suspend fun markPushed(id: String, updatedAt: Long, remoteMs: Long)
+
+    // the server confirmed the delete: remove the row for good, unless the note changed again meanwhile
+    @Query("DELETE FROM notes WHERE id = :id AND deleted_at IS NOT NULL AND updated_at = :updatedAt")
+    suspend fun purge(id: String, updatedAt: Long)
+
+    @Query("UPDATE notes SET remote_updated_at = :remoteMs WHERE id = :id")
+    suspend fun setRemoteUpdatedAt(id: String, remoteMs: Long)
+
+    @Query(
+        "UPDATE notes SET title = :title, description = :description, completed = :completed, position = :position, " +
+            "due_date = :dueDate, updated_at = :updatedAt, deleted_at = NULL, dirty = 0, remote_updated_at = :remoteMs WHERE id = :id",
+    )
+    suspend fun overwriteFromRemote(
+        id: String, title: String, description: String, completed: Boolean, position: Double,
+        dueDate: Long?, updatedAt: Long, remoteMs: Long,
+    )
+
+    // notes this device has seen on the server (alive here), to find the ones that vanished from it
+    @Query("SELECT id FROM notes WHERE deleted_at IS NULL AND remote_updated_at IS NOT NULL")
+    suspend fun syncedIds(): List<String>
+
+    // a note that no longer exists on the server: to the sync it is a brand new note
+    @Query("UPDATE notes SET dirty = 1, remote_updated_at = NULL WHERE id = :id AND deleted_at IS NULL")
+    suspend fun reupload(id: String)
+
+    @Query("DELETE FROM notes WHERE deleted_at IS NOT NULL")
+    suspend fun deleteAllDeleted()
+
+    // the cloud copy was wiped: every note goes up again
+    @Query("UPDATE notes SET dirty = 1, remote_updated_at = NULL")
+    suspend fun markAllForUpload()
+
+    // the key was created here: notes uploaded before without it go up again, encrypted
+    @Query("UPDATE notes SET dirty = 1 WHERE deleted_at IS NULL")
+    suspend fun markAllDirty()
+
     @Query("SELECT id FROM notes WHERE deleted_at IS NULL AND completed = 1")
     suspend fun completedIds(): List<String>
 }

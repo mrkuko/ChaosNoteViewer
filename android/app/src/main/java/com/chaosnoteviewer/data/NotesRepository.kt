@@ -10,7 +10,7 @@ import java.util.UUID
 class NotesRepository(
     private val db: AppDatabase,
     private val now: () -> Long = System::currentTimeMillis,
-) : com.chaosnoteviewer.account.AccountStore {
+) : com.chaosnoteviewer.account.AccountStore, SyncStore {
     private val notes = db.notes()
     private val state = db.syncState()
 
@@ -76,6 +76,57 @@ class NotesRepository(
         val t = now()
         notes.alive().forEachIndexed { i, n -> notes.setPosition(n.id, (i + 1).toDouble(), t) }
     }
+
+    // ---- sync ----
+
+    override suspend fun dirtyRows(): List<NoteEntity> = notes.dirtyRows()
+    override suspend fun markPushed(id: String, updatedAt: Long, remoteMs: Long) = notes.markPushed(id, updatedAt, remoteMs)
+    override suspend fun purge(id: String, updatedAt: Long) = notes.purge(id, updatedAt)
+    override suspend fun syncedIds(): List<String> = notes.syncedIds()
+    override suspend fun reupload(id: String) = notes.reupload(id)
+
+    override suspend fun applyRemote(items: List<RemoteItem>, uid: String): Int = db.withTransaction {
+        var changed = 0
+        for (item in items) {
+            val n = item.note ?: continue
+            val local = notes.get(item.id)
+            when {
+                local == null -> {
+                    notes.insert(
+                        NoteEntity(
+                            id = item.id, authorId = uid, title = n.title, description = n.description,
+                            completed = n.completed, position = n.position, dueDate = n.dueDate,
+                            createdAt = n.createdAt, updatedAt = n.updatedAt, deletedAt = null,
+                            dirty = false, remoteUpdatedAt = item.tsMs,
+                        ),
+                    )
+                    changed++
+                }
+                // the local version is newer or the same (e.g. our own push coming back)
+                local.updatedAt >= n.updatedAt -> if (!local.dirty) notes.setRemoteUpdatedAt(item.id, item.tsMs)
+                else -> {
+                    notes.overwriteFromRemote(
+                        item.id, n.title, n.description, n.completed, n.position, n.dueDate, n.updatedAt, item.tsMs,
+                    )
+                    changed++
+                }
+            }
+        }
+        items.lastOrNull()?.let {
+            state.set(SyncStateEntity(StateKeys.CURSOR_TS, it.tsRaw))
+            state.set(SyncStateEntity(StateKeys.CURSOR_ID, it.id))
+        }
+        changed
+    }
+
+    override suspend fun forgetRemote() = db.withTransaction {
+        notes.deleteAllDeleted()
+        notes.markAllForUpload()
+        state.clear(StateKeys.CURSOR_TS)
+        state.clear(StateKeys.CURSOR_ID)
+    }
+
+    override suspend fun markAllDirty() = notes.markAllDirty()
 
     override suspend fun claimNotes(uid: String) = notes.claim(uid, now())
     override suspend fun rebindNotes(oldUid: String, newUid: String) = notes.rebind(oldUid, newUid, now())
