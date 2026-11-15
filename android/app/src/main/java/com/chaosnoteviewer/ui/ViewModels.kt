@@ -28,6 +28,7 @@ data class ListState(
     val shown: List<NoteEntity> = emptyList(),
     val total: Int = 0,                     // live notes, any filter
     val completedCount: Int = 0,            // live completed notes, any filter
+    val counts: Map<NoteFilter, Int> = emptyMap(),   // how many notes each filter shows
     val filter: NoteFilter = NoteFilter.OPEN,
     val sort: SortField = SortField.OWN,
     val desc: Boolean = false,
@@ -59,6 +60,7 @@ class NotesViewModel(private val repo: NotesRepository) : ViewModel() {
             shown = NoteQuery.shown(all, f, s, d, today),
             total = all.size,
             completedCount = all.count { it.completed },
+            counts = NoteFilter.entries.associateWith { fl -> all.count { NoteQuery.matches(it, fl, today) } },
             filter = f, sort = s, desc = d, startOfToday = today, loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListState())

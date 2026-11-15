@@ -1,24 +1,25 @@
 package com.chaosnoteviewer.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -26,8 +27,12 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,6 +49,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,53 +76,100 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun NotesListScreen(vm: NotesViewModel, onOpenNote: (String) -> Unit, onNewNote: () -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.list.collectAsStateWithLifecycle()
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var sortMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     var confirmDeleteCompleted by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Notes") },
-                actions = {
-                    Box {
-                        IconButton(onClick = { sortMenu = true }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Sort")
-                        }
-                        SortMenu(state, expanded = sortMenu, onDismiss = { sortMenu = false }, onSort = vm::setSort)
-                    }
-                    Box {
-                        IconButton(onClick = { moreMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                        }
-                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Delete all completed (${state.completedCount})") },
-                                enabled = state.completedCount > 0,
-                                onClick = { moreMenu = false; confirmDeleteCompleted = true },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Settings") },
-                                leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                onClick = { moreMenu = false; onOpenSettings() },
-                            )
-                        }
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onNewNote) {
-                Icon(Icons.Filled.Add, contentDescription = "New note")
+    // Back closes the open drawer first
+    BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+
+    // Side navigation, pulled out from the left edge or with the menu button: which notes the list
+    // shows, settings at the bottom (same structure as the desktop app).
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        drawerContent = {
+            ModalDrawerSheet {
+                Text(
+                    "Chaos Note Viewer",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+                )
+                for (f in NoteFilter.entries)
+                    NavigationDrawerItem(
+                        icon = { Icon(f.icon, contentDescription = null) },
+                        label = { Text(f.menuLabel) },
+                        badge = { Text((state.counts[f] ?: 0).toString()) },
+                        selected = state.filter == f,
+                        onClick = { vm.setFilter(f); scope.launch { drawer.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                Spacer(Modifier.weight(1f))
+                HorizontalDivider(Modifier.padding(horizontal = 28.dp))
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                    label = { Text("Settings") },
+                    selected = false,
+                    onClick = { scope.launch { drawer.close() }; onOpenSettings() },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
         },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            FilterRow(state, vm::setFilter, onResetSort = { vm.setSort(SortField.OWN, false) })
-            if (state.loaded && state.shown.isEmpty())
-                EmptyText(state)
-            else
-                NotesList(state, vm, onOpenNote)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(state.filter.title) },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawer.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { sortMenu = true }) {
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Sort")
+                            }
+                            SortMenu(state, expanded = sortMenu, onDismiss = { sortMenu = false }, onSort = vm::setSort)
+                        }
+                        // desktop shows this button only in the Completed list
+                        if (state.filter == NoteFilter.COMPLETED && state.completedCount > 0)
+                            Box {
+                                IconButton(onClick = { moreMenu = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                                }
+                                DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete all completed (${state.completedCount})") },
+                                        onClick = { moreMenu = false; confirmDeleteCompleted = true },
+                                    )
+                                }
+                            }
+                    },
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(onClick = onNewNote) {
+                    Icon(Icons.Filled.Add, contentDescription = "New note")
+                }
+            },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                // a forced order is on: show it, a tap goes back to your own order
+                if (state.sorted)
+                    Row(Modifier.padding(horizontal = 12.dp)) {
+                        AssistChip(
+                            onClick = { vm.setSort(SortField.OWN, false) },
+                            label = { Text(state.sortText) },
+                            trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Back to your order") },
+                        )
+                    }
+                if (state.loaded && state.shown.isEmpty())
+                    EmptyText(state)
+                else
+                    NotesList(state, vm, onOpenNote)
+            }
         }
     }
 
@@ -129,24 +185,27 @@ fun NotesListScreen(vm: NotesViewModel, onOpenNote: (String) -> Unit, onNewNote:
     }
 }
 
-@Composable
-private fun FilterRow(state: ListState, onFilter: (NoteFilter) -> Unit, onResetSort: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // a forced order is on: show it first (visible without scrolling), a tap goes back to your own order
-        if (state.sorted)
-            AssistChip(
-                onClick = onResetSort,
-                label = { Text(state.sortText) },
-                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Back to your order") },
-            )
-        for (f in NoteFilter.entries)
-            FilterChip(selected = state.filter == f, onClick = { onFilter(f) }, label = { Text(f.label) })
+private val NoteFilter.title: String
+    get() = when (this) {
+        NoteFilter.OPEN -> "Open notes"
+        NoteFilter.COMPLETED -> "Completed"
+        NoteFilter.ALL -> "All notes"
+        NoteFilter.IMPORTANT -> "Important"
     }
-}
+
+private val NoteFilter.menuLabel: String
+    get() = when (this) {
+        NoteFilter.IMPORTANT -> "Important"
+        else -> label
+    }
+
+private val NoteFilter.icon: ImageVector
+    get() = when (this) {
+        NoteFilter.OPEN -> Icons.Outlined.CheckCircle
+        NoteFilter.COMPLETED -> Icons.Filled.CheckCircle
+        NoteFilter.ALL -> Icons.AutoMirrored.Filled.List
+        NoteFilter.IMPORTANT -> Icons.Filled.Warning
+    }
 
 // Fields; picking the current forced field again flips its direction.
 @Composable
