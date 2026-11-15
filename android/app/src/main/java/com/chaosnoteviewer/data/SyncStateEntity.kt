@@ -30,4 +30,7 @@ object StateKeys {
     // the user saw it and confirmed they saved it; same names as on desktop, other content
     const val ENC_KEY = "enc_key"
     const val KEY_CONFIRMED = "key_confirmed"
+    // per-device switches (not synced): daily reminder about notes due today or overdue, open-notes count on the icon
+    const val REMINDERS = "reminders"
+    const val COUNT_BADGE = "count_badge"
 }

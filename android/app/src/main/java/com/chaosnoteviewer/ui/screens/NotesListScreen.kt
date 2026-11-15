@@ -1,5 +1,6 @@
 package com.chaosnoteviewer.ui.screens
 
+import com.chaosnoteviewer.ui.AppIcon
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,17 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -50,7 +40,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
@@ -70,7 +59,6 @@ import com.chaosnoteviewer.ui.ListState
 import com.chaosnoteviewer.ui.NotesViewModel
 import com.chaosnoteviewer.ui.SyncViewModel
 import com.chaosnoteviewer.sync.KeyPhase
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.size
 import com.chaosnoteviewer.ui.linkify
@@ -104,7 +92,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                 )
                 for (f in NoteFilter.entries)
                     NavigationDrawerItem(
-                        icon = { Icon(f.icon, contentDescription = null) },
+                        icon = { AppIcon(f.iconName) },
                         label = { Text(f.menuLabel) },
                         badge = { Text((state.counts[f] ?: 0).toString()) },
                         selected = state.filter == f,
@@ -114,7 +102,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                 Spacer(Modifier.weight(1f))
                 HorizontalDivider(Modifier.padding(horizontal = 28.dp))
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                    icon = { AppIcon("gear") },
                     label = { Text("Settings") },
                     selected = false,
                     onClick = { scope.launch { drawer.close() }; onOpenSettings() },
@@ -129,7 +117,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                     title = { Text(state.filter.title) },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawer.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                            AppIcon("menu", "Menu")
                         }
                     },
                     actions = {
@@ -142,16 +130,16 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                                 if (sync.syncing)
                                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                                 else
-                                    Icon(
-                                        Icons.Filled.Refresh,
-                                        contentDescription = "Sync",
+                                    AppIcon(
+                                        "sync-arrows",
+                                        "Sync",
                                         tint = if (sync.syncError.isNotEmpty() || sync.phase != KeyPhase.Ready) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface,
                                     )
                             }
                         Box {
                             IconButton(onClick = { sortMenu = true }) {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Sort")
+                                AppIcon("sort", "Sort")
                             }
                             SortMenu(state, expanded = sortMenu, onDismiss = { sortMenu = false }, onSort = vm::setSort)
                         }
@@ -159,7 +147,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                         if (state.filter == NoteFilter.COMPLETED && state.completedCount > 0)
                             Box {
                                 IconButton(onClick = { moreMenu = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                                    AppIcon("more-vertical", "More")
                                 }
                                 DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                                     DropdownMenuItem(
@@ -173,7 +161,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
             },
             floatingActionButton = {
                 FloatingActionButton(onClick = onNewNote) {
-                    Icon(Icons.Filled.Add, contentDescription = "New note")
+                    AppIcon("plus", "New note")
                 }
             },
         ) { padding ->
@@ -184,7 +172,7 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                         AssistChip(
                             onClick = { vm.setSort(SortField.OWN, false) },
                             label = { Text(state.sortText) },
-                            trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Back to your order") },
+                            trailingIcon = { AppIcon("x-circle", "Back to your order", size = 18.dp) },
                         )
                     }
                 if (state.loaded && state.shown.isEmpty())
@@ -221,12 +209,12 @@ private val NoteFilter.menuLabel: String
         else -> label
     }
 
-private val NoteFilter.icon: ImageVector
+private val NoteFilter.iconName: String
     get() = when (this) {
-        NoteFilter.OPEN -> Icons.Outlined.CheckCircle
-        NoteFilter.COMPLETED -> Icons.Filled.CheckCircle
-        NoteFilter.ALL -> Icons.AutoMirrored.Filled.List
-        NoteFilter.IMPORTANT -> Icons.Filled.Warning
+        NoteFilter.OPEN -> "checkbox"
+        NoteFilter.COMPLETED -> "check-circle"
+        NoteFilter.ALL -> "list"
+        NoteFilter.IMPORTANT -> "exclamation"
     }
 
 // Fields; picking the current forced field again flips its direction.
@@ -247,7 +235,7 @@ private fun SortMenu(state: ListState, expanded: Boolean, onDismiss: () -> Unit,
                             )
                     }
                 },
-                leadingIcon = { if (current) Icon(Icons.Filled.Check, contentDescription = null) },
+                leadingIcon = { if (current) AppIcon("check") },
                 onClick = {
                     if (current && field != SortField.OWN) onSort(field, !state.desc)
                     else onSort(field, field.defaultDesc)
@@ -316,7 +304,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
                                         },
                                     ),
                                 ) {
-                                    Icon(Icons.Filled.Menu, contentDescription = "Drag to reorder")
+                                    AppIcon("menu", "Drag to reorder")
                                 }
                             }
                         },
@@ -355,7 +343,7 @@ private fun NoteRow(
                 Column {
                     if (missing)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                            AppIcon("exclamation", tint = MaterialTheme.colorScheme.error, size = 16.dp)
                             Text(
                                 " Not in the cloud any more",
                                 color = MaterialTheme.colorScheme.error,

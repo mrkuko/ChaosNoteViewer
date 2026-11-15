@@ -1,13 +1,12 @@
 package com.chaosnoteviewer.ui.screens
 
+import com.chaosnoteviewer.ui.AppIcon
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,12 +32,7 @@ fun BackButton(onBack: () -> Unit) {
 fun DueDate(dueDate: Long, overdue: Boolean, style: TextStyle = MaterialTheme.typography.bodySmall) {
     val color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            if (overdue) Icons.Filled.Warning else Icons.Filled.DateRange,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(16.dp),
-        )
+        AppIcon(if (overdue) "calendar-alert" else "calendar", tint = color, size = 16.dp)
         Spacer(Modifier.width(4.dp))
         Text(if (overdue) "Overdue · ${Dates.format(dueDate)}" else Dates.format(dueDate), color = color, style = style)
     }

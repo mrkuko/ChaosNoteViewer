@@ -1,14 +1,12 @@
 package com.chaosnoteviewer.ui.screens
 
+import com.chaosnoteviewer.ui.AppIcon
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,12 +83,12 @@ fun EditScreen(vm: NotesViewModel, noteId: String?, onDone: () -> Unit) {
             )
             Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { picking = true }) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null, Modifier.padding(end = 8.dp))
+                    AppIcon("calendar", modifier = Modifier.padding(end = 8.dp))
                     Text(dueDate?.let { "Deadline: ${Dates.format(it)}" } ?: "Add deadline")
                 }
                 if (dueDate != null)
                     IconButton(onClick = { dueDate = null }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Remove deadline")
+                        AppIcon("x-circle", "Remove deadline")
                     }
             }
         }

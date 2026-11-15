@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Chaos Note Viewer</string>
+    <string name="widget_description">Your open notes on the home screen</string>
 </resources>

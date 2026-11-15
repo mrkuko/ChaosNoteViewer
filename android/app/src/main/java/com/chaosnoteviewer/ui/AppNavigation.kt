@@ -1,6 +1,8 @@
 package com.chaosnoteviewer.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.chaosnoteviewer.LaunchRequest
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -24,13 +26,25 @@ object Routes {
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(launch: LaunchRequest = LaunchRequest(), onLaunchHandled: () -> Unit = {}) {
     val nav = rememberNavController()
     // one NotesViewModel for the whole app, shared by all screens
     val vm: NotesViewModel = viewModel(factory = NotesViewModel.Factory)
     // created here, so the remembered sign-in is picked up as soon as the app starts
     val accountVm: AccountViewModel = viewModel(factory = AccountViewModel.Factory)
     val syncVm: SyncViewModel = viewModel(factory = SyncViewModel.Factory)
+
+    // opened from the widget or a notification: go to the note, the new note form or the list
+    LaunchedEffect(launch) {
+        if (launch.isEmpty) return@LaunchedEffect
+        launch.filter?.let(vm::setFilter)
+        nav.popBackStack(Routes.LIST, inclusive = false)
+        when {
+            launch.noteId != null -> nav.navigate(Routes.detail(launch.noteId))
+            launch.newNote -> nav.navigate(Routes.edit())
+        }
+        onLaunchHandled()
+    }
 
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {

@@ -6,6 +6,15 @@ import com.chaosnoteviewer.account.AuthException
 import com.chaosnoteviewer.account.AuthGateway
 import com.chaosnoteviewer.account.FirebaseAuthGateway
 import com.chaosnoteviewer.crypto.AndroidKeystoreWrapper
+import com.chaosnoteviewer.extras.DeadlineWorker
+import com.chaosnoteviewer.extras.Extras
+import com.chaosnoteviewer.extras.ExtrasPrefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import com.chaosnoteviewer.crypto.KeyStorage
 import com.chaosnoteviewer.data.AppDatabase
 import com.chaosnoteviewer.data.NotesRepository
@@ -19,6 +28,20 @@ import com.google.firebase.auth.FirebaseAuth
 
 // Holds the app-wide objects (no DI framework, the app is small).
 class ChaosApp : Application() {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val extrasPrefs by lazy { ExtrasPrefs(notes) }
+
+    @OptIn(FlowPreview::class)
+    override fun onCreate() {
+        super.onCreate()
+        // the widget, the count on the icon and a showing reminder follow the notes (a burst of changes = one update)
+        appScope.launch {
+            notes.alive.debounce(400).collect { runCatching { Extras.refresh(this@ChaosApp, extrasPrefs, it) } }
+        }
+        // the daily deadline check is realigned to 8:00 at every start
+        appScope.launch { if (extrasPrefs.reminders()) DeadlineWorker.schedule(this@ChaosApp) }
+    }
+
     val database by lazy { AppDatabase.open(this) }
     val notes by lazy { NotesRepository(database) }
 

@@ -1,5 +1,6 @@
 package com.chaosnoteviewer.ui.screens
 
+import com.chaosnoteviewer.ui.AppIcon
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,11 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,7 +34,6 @@ import com.chaosnoteviewer.data.NoteQuery
 import com.chaosnoteviewer.ui.Dates
 import com.chaosnoteviewer.ui.NotesViewModel
 import com.chaosnoteviewer.ui.SyncViewModel
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.layout.Row
@@ -63,8 +58,8 @@ fun DetailScreen(vm: NotesViewModel, syncVm: SyncViewModel, noteId: String, onBa
                 title = { Text("Note") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
-                    IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit") }
-                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
+                    IconButton(onClick = onEdit) { AppIcon("pencil", "Edit") }
+                    IconButton(onClick = { confirmDelete = true }) { AppIcon("trash", "Delete") }
                 },
             )
         },
@@ -81,7 +76,7 @@ fun DetailScreen(vm: NotesViewModel, syncVm: SyncViewModel, noteId: String, onBa
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Row {
-                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            AppIcon("exclamation", tint = MaterialTheme.colorScheme.onErrorContainer)
                             Text(
                                 "  Not in the cloud any more",
                                 style = MaterialTheme.typography.titleSmall,
@@ -121,12 +116,12 @@ fun DetailScreen(vm: NotesViewModel, syncVm: SyncViewModel, noteId: String, onBa
             Spacer(Modifier.height(16.dp))
             if (n.completed)
                 OutlinedButton(onClick = { vm.setCompleted(n.id, false) }, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, Modifier.padding(end = 8.dp))
+                    AppIcon("undo", modifier = Modifier.padding(end = 8.dp))
                     Text("Mark as open")
                 }
             else
                 Button(onClick = { vm.setCompleted(n.id, true) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors()) {
-                    Icon(Icons.Filled.Check, contentDescription = null, Modifier.padding(end = 8.dp))
+                    AppIcon("check", modifier = Modifier.padding(end = 8.dp))
                     Text("Mark as completed")
                 }
         }

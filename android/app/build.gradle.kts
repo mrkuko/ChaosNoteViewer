@@ -54,6 +54,10 @@ android {
     sourceSets["test"].kotlin.directories.add("src/sharedTest/java")
     sourceSets["androidTest"].kotlin.directories.add("src/sharedTest/java")
 
+    // the app's own icons are shared with the desktop app: core/assets/icons/*.png are packed as assets (icons/<name>.png)
+    sourceSets["main"].assets.directories.add("../../core/assets")
+    androidResources.ignoreAssetsPattern = "chaosnoteviewer.svg"
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -80,6 +84,9 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.reorderable)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.work.runtime)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.kotlinx.coroutines.play.services)
@@ -90,6 +97,8 @@ dependencies {
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.kotlinx.coroutines.test)
 }

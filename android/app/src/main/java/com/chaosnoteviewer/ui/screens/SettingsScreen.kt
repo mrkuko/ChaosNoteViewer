@@ -1,5 +1,22 @@
 package com.chaosnoteviewer.ui.screens
 
+import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxWidth as fillWidth
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chaosnoteviewer.extras.NotesWidgetReceiver
+import com.chaosnoteviewer.extras.Notifications
+import com.chaosnoteviewer.ui.ExtrasViewModel
 import androidx.compose.foundation.layout.Arrangement
 import java.time.format.FormatStyle
 import java.time.format.DateTimeFormatter
@@ -64,6 +81,7 @@ fun SettingsScreen(vm: AccountViewModel, syncVm: SyncViewModel, onBack: () -> Un
             Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            ExtrasSection()
             Text("Account", style = MaterialTheme.typography.titleMedium)
             when {
                 !vm.configured -> Text(
@@ -273,3 +291,89 @@ private fun KeyBlock(block: String) {
 
 private fun formatTime(ms: Long): String =
     Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT))
+
+// ---- reminders, the count on the icon, the widget ----
+
+@Composable
+private fun ExtrasSection() {
+    val vm: ExtrasViewModel = viewModel(factory = ExtrasViewModel.Factory)
+    val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var blocked by rememberSaveable { mutableStateOf(false) }
+    // the switch that waits for the answer of the permission dialog: "reminders" or "badge"
+    var pending by rememberSaveable { mutableStateOf("") }
+
+    fun apply(which: String) {
+        if (which == "reminders") vm.setReminders(true) else vm.setCountBadge(true)
+    }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val which = pending
+        pending = ""
+        blocked = !granted
+        if (granted && which.isNotEmpty()) apply(which)
+    }
+
+    // turning a switch on needs the notification permission (Android 13+) and notifications not blocked
+    fun turnOn(which: String) {
+        blocked = false
+        when {
+            Notifications.canPost(context) -> apply(which)
+            Build.VERSION.SDK_INT >= 33 && !Notifications.permissionDenied(context) -> {
+                pending = which
+                Notifications.rememberAsked(context)
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            else -> blocked = true          // refused before, or blocked in the system settings: only the user can change it
+        }
+    }
+
+    Text("Reminders and widget", style = MaterialTheme.typography.titleMedium)
+    SwitchRow(
+        title = "Remind me about deadlines",
+        text = "Every morning around 8:00, a notification with the notes that are due today or overdue.",
+        checked = state.reminders,
+        onChange = { if (it) turnOn("reminders") else vm.setReminders(false) },
+    )
+    SwitchRow(
+        title = "Show open notes on the app icon",
+        text = "A quiet notification with the number of open notes. Whether the launcher shows the number or only a dot depends on the launcher.",
+        checked = state.countBadge,
+        onChange = { if (it) turnOn("badge") else vm.setCountBadge(false) },
+    )
+    if (blocked)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Notifications are blocked for this app. Allow them in the system settings to use this.",
+                color = MaterialTheme.colorScheme.error,
+            )
+            OutlinedButton(onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }) { Text("Open notification settings") }
+        }
+
+    val widgets = remember { AppWidgetManager.getInstance(context) }
+    if (widgets.isRequestPinAppWidgetSupported)
+        OutlinedButton(onClick = {
+            widgets.requestPinAppWidget(ComponentName(context, NotesWidgetReceiver::class.java), null, null)
+        }) { Text("Add the widget to the home screen") }
+}
+
+@Composable
+private fun SwitchRow(title: String, text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
