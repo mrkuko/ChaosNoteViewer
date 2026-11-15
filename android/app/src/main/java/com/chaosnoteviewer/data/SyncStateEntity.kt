@@ -33,4 +33,6 @@ object StateKeys {
     // per-device switches (not synced): daily reminder about notes due today or overdue, open-notes count on the icon
     const val REMINDERS = "reminders"
     const val COUNT_BADGE = "count_badge"
+    // sync while the app is closed (WorkManager); on unless "0"
+    const val BG_SYNC = "bg_sync"
 }

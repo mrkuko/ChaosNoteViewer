@@ -23,6 +23,8 @@ data class SyncState(
     // why the last sync failed, "" when it worked
     val syncError: String = "",
     val lastSyncMs: Long = 0,
+    // consecutive failures (0..MAX_FAILURES): the polling slows down while this is above 0
+    val failures: Int = 0,
     // notes this device had synced that are gone from the server (deleted on another device)
     val missing: Set<String> = emptySet(),
 )
@@ -35,7 +37,13 @@ class SyncManager(
     private val remote: RemoteStore?,
     keyStorage: KeyStorage,
     private val now: () -> Long = System::currentTimeMillis,
+    // the server says the sign-in is gone for good (not just offline): the account must be signed out
+    private val onSessionLost: () -> Unit = {},
 ) {
+    companion object {
+        const val MAX_FAILURES = 6
+    }
+
     private val keys = remote?.let { KeyFlow(keyStorage, it, store) }
     private val engine = remote?.let { SyncEngine(store, it) }
     private val storage = keyStorage
@@ -65,8 +73,13 @@ class SyncManager(
         val ready = lock.withLock {
             _state.update { it.copy(keyBusy = true, keyError = "") }
             val result = flow.begin(uid())
+            if (result.error?.code == "SESSION_LOST") {
+                sessionLost()
+                return
+            }
             _state.update {
                 it.copy(
+                    failures = if (result.error != null) minOf(it.failures + 1, MAX_FAILURES) else 0,
                     keyBusy = false,
                     phase = result.phase,
                     mismatch = result.mismatch,
@@ -95,7 +108,7 @@ class SyncManager(
             val uid = uid()
             try {
                 engine.run(uid, key)
-                _state.update { it.copy(syncError = "", lastSyncMs = now()) }
+                _state.update { it.copy(syncError = "", lastSyncMs = now(), failures = 0) }
                 try {
                     val missing = engine.reconcile(uid).toSet()
                     _state.update { it.copy(missing = missing) }
@@ -103,15 +116,33 @@ class SyncManager(
                     // the next sync looks again
                 }
             } catch (e: SyncException) {
-                if (e.code == "BAD_KEY")
+                when (e.code) {
                     // the cloud copy was re-encrypted with another key (reset on another device)
-                    _state.update { it.copy(mismatch = true, phase = KeyPhase.Enter, keyBlock = "") }
-                else
-                    _state.update { it.copy(syncError = message(e)) }
+                    "BAD_KEY" -> _state.update { it.copy(mismatch = true, phase = KeyPhase.Enter, keyBlock = "") }
+                    "SESSION_LOST" -> sessionLost()
+                    else -> _state.update { it.copy(syncError = message(e), failures = minOf(it.failures + 1, MAX_FAILURES)) }
+                }
             }
         } finally {
             _state.update { it.copy(syncing = false) }
             lock.unlock()
+        }
+    }
+
+    private fun sessionLost() {
+        _state.value = SyncState()
+        onSessionLost()
+    }
+
+    // For the background: waits for a key task that is running, then does what is due: decide about the key (offline
+    // at the start) or sync. Does nothing before sign-in.
+    suspend fun syncOrStart() {
+        if (!_state.value.signedIn || remote == null) return
+        lock.withLock { }
+        when (_state.value.phase) {
+            KeyPhase.Unknown -> startKeyFlow()
+            KeyPhase.Ready -> syncNow()
+            else -> Unit              // waiting for the user (save or enter the key)
         }
     }
 

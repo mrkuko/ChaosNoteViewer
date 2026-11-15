@@ -37,13 +37,14 @@ class DeadlineWorker(context: Context, params: WorkerParameters) : CoroutineWork
             return Duration.between(now, next)
         }
 
-        // starts (or realigns) the daily check
+        // Starts the daily check, or keeps the one that is there. It must never cancel a running check: when the system
+        // starts this app only to run it, onCreate calls this too.
         fun schedule(context: Context) {
             val delay = delayUntilNext(LocalDateTime.now(ZoneId.systemDefault()))
             val request = PeriodicWorkRequestBuilder<DeadlineWorker>(24, TimeUnit.HOURS)
                 .setInitialDelay(delay.toMinutes(), TimeUnit.MINUTES)
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE, request)
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, request)
         }
 
         fun cancel(context: Context) {

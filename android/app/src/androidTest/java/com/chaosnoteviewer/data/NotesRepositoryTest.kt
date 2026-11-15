@@ -142,6 +142,31 @@ class NotesRepositoryTest {
         assertFalse(repo.get(b.id)!!.dirty)
     }
 
+    @Test fun claimingNeverTouchesANoteThatIsAlreadyInTheCloud() = runTest {
+        val synced = repo.add("synced"); val local = repo.add("never synced")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET dirty = 0, remote_updated_at = 500 WHERE id = '${synced.id}'")
+        db.openHelper.writableDatabase.execSQL("UPDATE notes SET dirty = 0 WHERE id = '${local.id}'")
+        clock = 9_000L
+        repo.claimNotes("uid-1")                                  // the app does this at every start
+        val s = repo.get(synced.id)!!
+        assertEquals("uid-1", s.authorId)
+        assertEquals("its updated_at stays: it must not beat a newer edit from another device", 1_000L, s.updatedAt)
+        assertFalse("and it is not sent again", s.dirty)
+        val l = repo.get(local.id)!!
+        assertEquals("uid-1", l.authorId)
+        assertEquals(9_000L, l.updatedAt)                         // a note the cloud has never seen is queued
+        assertTrue(l.dirty)
+        repo.claimNotes("uid-1")                                  // and again: nothing changes
+        assertEquals(1_000L, repo.get(synced.id)!!.updatedAt)
+    }
+
+    @Test fun aNewNoteBelongsToTheBoundAccount() = runTest {
+        assertNull(repo.add("before any sign-in").authorId)
+        repo.setState(StateKeys.UID, "uid-1")
+        assertEquals("uid-1", repo.add("after").authorId)
+        assertEquals("uid-1", repo.get(repo.add("again").id)!!.authorId)
+    }
+
     @Test fun rebindNotesMovesNotesToTheNewUid() = runTest {
         val a = repo.add("a"); val b = repo.add("b")
         db.openHelper.writableDatabase.execSQL("UPDATE notes SET author_id = 'old' WHERE id = '${a.id}'")

@@ -14,10 +14,6 @@ class AccountViewModel(private val manager: AccountManager) : ViewModel() {
     val configured: Boolean get() = manager.configured
     val state = manager.state
 
-    init {
-        viewModelScope.launch { manager.restore() }
-    }
-
     fun authenticate(create: Boolean, email: String, password: String) =
         viewModelScope.launch { manager.authenticate(create, email, password) }
 

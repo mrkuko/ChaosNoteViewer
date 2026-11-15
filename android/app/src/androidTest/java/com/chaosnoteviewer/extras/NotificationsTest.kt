@@ -44,6 +44,16 @@ class NotificationsTest {
         }
         return manager.activeNotifications.firstOrNull { it.id == id }
     }
+    // an update of a shown notification also arrives a moment later: wait for the expected title
+    private fun titleOf(id: Int, expected: String): String? {
+        repeat(30) {
+            val title = manager.activeNotifications.firstOrNull { it.id == id }?.title()
+            if (title == expected) return title
+            Thread.sleep(100)
+        }
+        return manager.activeNotifications.firstOrNull { it.id == id }?.title()
+    }
+
     private fun StatusBarNotification.title() = notification.extras.getCharSequence(Notification.EXTRA_TITLE).toString()
     private fun StatusBarNotification.lines() =
         notification.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.map { it.toString() }.orEmpty()
@@ -65,7 +75,7 @@ class NotificationsTest {
 
     @Test fun oneNoteIsSingular() {
         Notifications.showDeadlines(context, DeadlineSummary.of(listOf(note("only", today)), today), today, alert = true)
-        assertEquals("1 note is due today or overdue", shown(Notifications.ID_DEADLINES)!!.title())
+        assertEquals("1 note is due today or overdue", titleOf(Notifications.ID_DEADLINES, "1 note is due today or overdue"))
     }
 
     @Test fun nothingDueMeansNoReminder() {
@@ -87,7 +97,7 @@ class NotificationsTest {
         Notifications.showDeadlines(context, DeadlineSummary.of(listOf(a, b), today), today, alert = true)
 
         Extras.refresh(context, prefs, listOf(a.copy(completed = true), b))            // a is done
-        assertEquals("1 note is due today or overdue", shown(Notifications.ID_DEADLINES)!!.title())
+        assertEquals("1 note is due today or overdue", titleOf(Notifications.ID_DEADLINES, "1 note is due today or overdue"))
         assertEquals(listOf("Today: b"), shown(Notifications.ID_DEADLINES)!!.lines().ifEmpty { listOf("Today: b") })
 
         Extras.refresh(context, prefs, listOf(a.copy(completed = true), b.copy(completed = true)))   // all done
@@ -117,7 +127,7 @@ class NotificationsTest {
         assertEquals(Notification.VISIBILITY_SECRET, n.notification.visibility)         // nothing on the lock screen
 
         Extras.refresh(context, prefs, listOf(note("a")))
-        assertEquals("1 open note", shown(Notifications.ID_COUNT)!!.title())
+        assertEquals("1 open note", titleOf(Notifications.ID_COUNT, "1 open note"))
 
         Extras.refresh(context, prefs, listOf(note("a", completed = true)))             // none open
         assertNull(shown(Notifications.ID_COUNT, expected = false))
@@ -130,5 +140,30 @@ class NotificationsTest {
         prefs.setCountBadge(false)
         Extras.refresh(context, prefs, listOf(note("a")))
         assertFalse(shown(Notifications.ID_COUNT, expected = false) != null)
+    }
+
+    // ---- the daily check must never cancel itself ----
+
+    private val work get() = androidx.work.WorkManager.getInstance(context)
+    private fun reminderInfos() = work.getWorkInfosForUniqueWork("deadline-reminder").get().filter { !it.state.isFinished }
+
+    @Test fun theDailyCheckIsScheduledForAboutEight() {
+        DeadlineWorker.cancel(context); work.pruneWork().result.get()
+        DeadlineWorker.schedule(context)
+        val next = reminderInfos().single().nextScheduleTimeMillis
+        val time = java.time.Instant.ofEpochMilli(next).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+        assertTrue("due about 8:00, not $time", java.time.Duration.between(java.time.LocalTime.of(8, 0), time).abs().toMinutes() <= 2)
+        DeadlineWorker.cancel(context)
+    }
+
+    @Test fun startingTheAppDoesNotCancelOrMoveTheCheck() {
+        DeadlineWorker.cancel(context); work.pruneWork().result.get()
+        DeadlineWorker.schedule(context)
+        val before = reminderInfos().single()
+        repeat(3) { DeadlineWorker.schedule(context) }            // every app start does this
+        val after = reminderInfos().single()
+        assertEquals("the same job, not cancelled and enqueued again", before.id, after.id)
+        assertEquals(before.nextScheduleTimeMillis, after.nextScheduleTimeMillis)
+        DeadlineWorker.cancel(context)
     }
 }

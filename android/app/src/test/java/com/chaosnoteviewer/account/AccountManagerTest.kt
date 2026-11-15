@@ -254,4 +254,14 @@ class AccountManagerTest {
         manager.resetPassword("")
         assertEquals("Enter your email.", manager.state.value.error)
     }
+
+    @Test fun anEndedSessionSignsOutWithAMessageButKeepsTheBinding() = runTest {
+        existing("a@b.c")
+        manager.authenticate(false, "a@b.c", "secret1")
+        manager.sessionEnded()
+        assertEquals(Account.SignedOut, account)
+        assertNull(auth.signedIn)
+        assertEquals("You were signed out because your session ended. Sign in again.", manager.state.value.error)
+        assertEquals("uid-x", store.state[StateKeys.UID])         // the notes still belong to the account
+    }
 }

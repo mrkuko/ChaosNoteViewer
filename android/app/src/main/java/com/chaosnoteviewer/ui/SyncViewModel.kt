@@ -7,21 +7,29 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chaosnoteviewer.ChaosApp
-import com.chaosnoteviewer.account.Account
-import com.chaosnoteviewer.account.AccountManager
 import com.chaosnoteviewer.sync.SyncManager
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import com.chaosnoteviewer.sync.SyncScheduler
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class SyncViewModel(private val manager: SyncManager, account: AccountManager) : ViewModel() {
+// The sync screens. The account and the sync themselves live in ChaosApp (a background job needs them without a screen).
+class SyncViewModel(private val app: ChaosApp, private val manager: SyncManager) : ViewModel() {
     val state = manager.state
 
+    // sync while the app is closed, on unless the user turned it off
+    private val _backgroundSync = MutableStateFlow(true)
+    val backgroundSync: StateFlow<Boolean> = _backgroundSync.asStateFlow()
+
     init {
-        // the key flow and the first sync start when the account signs in (also at app start, from the remembered session)
-        viewModelScope.launch {
-            account.state.map { it.account is Account.SignedIn }.distinctUntilChanged().collect { manager.onSignedIn(it) }
-        }
+        viewModelScope.launch { _backgroundSync.value = app.extrasPrefs.backgroundSync() }
+    }
+
+    fun setBackgroundSync(on: Boolean) = viewModelScope.launch {
+        app.extrasPrefs.setBackgroundSync(on)
+        _backgroundSync.value = on
+        if (on && manager.state.value.signedIn) SyncScheduler.scheduleBackground(app) else if (!on) SyncScheduler.cancelBackground(app)
     }
 
     fun sync() = viewModelScope.launch { manager.syncNow() }
@@ -36,7 +44,7 @@ class SyncViewModel(private val manager: SyncManager, account: AccountManager) :
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ChaosApp
-                SyncViewModel(app.sync, app.account)
+                SyncViewModel(app, app.sync)
             }
         }
     }

@@ -17,6 +17,11 @@ class NotesRepository(
     // live notes in queue order
     val alive: Flow<List<NoteEntity>> = notes.observeAlive()
 
+    // notes changed here and not synced yet; changes by a pull don't count (they are not dirty)
+    val dirtyCount: Flow<Int> = notes.observeDirtyCount()
+
+    suspend fun dirtyCountNow(): Int = notes.dirtyCount()
+
     fun observe(id: String): Flow<NoteEntity?> = notes.observe(id)
 
     suspend fun get(id: String): NoteEntity? = notes.get(id)
@@ -27,6 +32,8 @@ class NotesRepository(
             val t = now()
             val note = NoteEntity(
                 id = UUID.randomUUID().toString(),
+                // once the database is bound to an account every note is that account's, signed in or not
+                authorId = state.get(StateKeys.UID)?.takeIf { it.isNotEmpty() },
                 title = title,
                 description = description,
                 position = notes.nextPosition(),
@@ -128,7 +135,10 @@ class NotesRepository(
 
     override suspend fun markAllDirty() = notes.markAllDirty()
 
-    override suspend fun claimNotes(uid: String) = notes.claim(uid, now())
+    override suspend fun claimNotes(uid: String) = db.withTransaction {
+        notes.claimUnsynced(uid, now())
+        notes.claimSynced(uid)
+    }
     override suspend fun rebindNotes(oldUid: String, newUid: String) = notes.rebind(oldUid, newUid, now())
 
     override suspend fun getState(key: String): String = state.get(key) ?: ""

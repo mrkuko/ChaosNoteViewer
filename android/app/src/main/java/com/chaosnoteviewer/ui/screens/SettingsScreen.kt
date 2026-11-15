@@ -23,6 +23,7 @@ import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 import java.time.Instant
 import com.chaosnoteviewer.sync.KeyPhase
+import com.chaosnoteviewer.sync.SyncScheduler
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalContext
@@ -182,6 +183,7 @@ private fun Busy(state: AccountState) {
 @Composable
 private fun SyncSection(vm: SyncViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val backgroundSync by vm.backgroundSync.collectAsStateWithLifecycle()
     var confirmReset by rememberSaveable { mutableStateOf(false) }
 
     Text("Sync", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -190,7 +192,8 @@ private fun SyncSection(vm: SyncViewModel) {
             Text(
                 when {
                     state.syncing -> "Syncing…"
-                    state.syncError.isNotEmpty() -> "Last sync failed: ${state.syncError}"
+                    state.syncError.isNotEmpty() -> "Last sync failed: ${state.syncError}" +
+                        if (state.failures > 1) " Trying again every ${retryText(state.failures)}." else ""
                     state.lastSyncMs > 0 -> "Last sync: ${formatTime(state.lastSyncMs)}"
                     else -> "Your notes are encrypted on this device before they are uploaded."
                 },
@@ -200,6 +203,12 @@ private fun SyncSection(vm: SyncViewModel) {
                 Button(onClick = vm::sync, enabled = !state.syncing) { Text("Sync now") }
                 if (state.syncing) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
             }
+            SwitchRow(
+                title = "Sync in the background",
+                text = "Also while the app is closed: about every 15 minutes with a network, and as soon as the network is back after changes made offline.",
+                checked = backgroundSync,
+                onChange = vm::setBackgroundSync,
+            )
             KeyBlock(state.keyBlock)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = vm::toggleKeyShown) { Text(if (state.keyBlock.isEmpty()) "Show encryption key" else "Hide key") }
@@ -376,4 +385,10 @@ private fun SwitchRow(title: String, text: String, checked: Boolean, onChange: (
         }
         Switch(checked = checked, onCheckedChange = null)
     }
+}
+
+// the waiting time between two tries while the sync keeps failing (30 s doubled per failure, as SyncScheduler does)
+private fun retryText(failures: Int): String {
+    val seconds = SyncScheduler.pollInterval(SyncScheduler.FOREGROUND_POLL_MS, failures) / 1000
+    return if (seconds < 120) "$seconds s" else "${seconds / 60} min"
 }

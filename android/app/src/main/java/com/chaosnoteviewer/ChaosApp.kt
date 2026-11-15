@@ -24,6 +24,14 @@ import com.chaosnoteviewer.sync.RemoteStore
 import com.chaosnoteviewer.sync.RestFirestore
 import com.chaosnoteviewer.sync.SyncException
 import com.chaosnoteviewer.sync.SyncManager
+import com.chaosnoteviewer.sync.SyncScheduler
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.chaosnoteviewer.account.Account
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import com.google.firebase.auth.FirebaseAuth
 
 // Holds the app-wide objects (no DI framework, the app is small).
@@ -40,6 +48,34 @@ class ChaosApp : Application() {
         }
         // the daily deadline check is realigned to 8:00 at every start
         appScope.launch { if (extrasPrefs.reminders()) DeadlineWorker.schedule(this@ChaosApp) }
+
+        // The account and the sync live here, not in a screen: a background job must find them as well.
+        appScope.launch {
+            account.restore()                         // the sign-in the Firebase SDK remembers
+            restored.complete(Unit)
+        }
+        appScope.launch {
+            // Only after the remembered sign-in was looked at: before that everybody looks signed out, and cancelling the
+            // background jobs then would stop the very job that started this process.
+            restored.await()
+            account.state.map { it.account is Account.SignedIn }.distinctUntilChanged().collect { signedIn ->
+                sync.onSignedIn(signedIn)
+                if (!signedIn) SyncScheduler.cancelBackground(this@ChaosApp)
+                else if (extrasPrefs.backgroundSync()) SyncScheduler.scheduleBackground(this@ChaosApp)
+            }
+        }
+        scheduler.startPushOnChange { extrasPrefs.backgroundSync() }
+        // polling needs the main thread's lifecycle of the whole app (foreground = some screen is visible)
+        android.os.Handler(mainLooper).post { scheduler.startForegroundPolling(ProcessLifecycleOwner.get().lifecycle) }
+    }
+
+    private val restored = CompletableDeferred<Unit>()
+
+    // For a background job: the remembered sign-in is restored and the sync knows about it (or there is none).
+    suspend fun awaitSignIn() {
+        restored.await()
+        if (account.state.value.account is Account.SignedIn)
+            withTimeoutOrNull(15_000) { sync.state.first { it.signedIn } }
     }
 
     val database by lazy { AppDatabase.open(this) }
@@ -59,13 +95,16 @@ class ChaosApp : Application() {
                 try {
                     gateway.idToken(refresh)
                 } catch (e: AuthException) {
-                    // signed out or revoked: the server would say the same
-                    throw SyncException(if (e.sessionLost) "UNAUTHENTICATED" else e.code, e.message.orEmpty())
+                    // the account is gone or disabled: the sync signs out (not the same as being offline)
+                    throw SyncException(if (e.sessionLost) "SESSION_LOST" else e.code, e.message.orEmpty())
                 }
             },
         )
     }
-    val sync by lazy { SyncManager(notes, remote, KeyStorage(notes, AndroidKeystoreWrapper())) }
+    val sync by lazy {
+        SyncManager(notes, remote, KeyStorage(notes, AndroidKeystoreWrapper()), onSessionLost = { account.sessionEnded() })
+    }
+    val scheduler by lazy { SyncScheduler(this, appScope, notes, sync) }
 
     private fun createAuth(): AuthGateway? {
         // with google-services.json the Firebase plugin already initialized the real project

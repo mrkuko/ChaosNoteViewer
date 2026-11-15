@@ -144,6 +144,13 @@ class AccountManager(private val store: AccountStore, private val auth: AuthGate
         _state.value = AccountState()
     }
 
+    // The sign-in can't be used any more (the account was deleted or disabled, the token revoked): back to signed out,
+    // with a message. The notes stay on this device, bound to the account.
+    fun sessionEnded() {
+        auth?.signOut()
+        _state.value = AccountState(error = "You were signed out because your session ended. Sign in again.")
+    }
+
     private fun fail(code: String) = _state.update { it.copy(error = AuthErrors.text(code), info = "") }
 
     private fun goPending(user: AuthUser, info: String) =

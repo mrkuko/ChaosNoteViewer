@@ -32,7 +32,8 @@ class SyncManagerTest {
             .also { dbs += it }
         val repo = NotesRepository(db) { clock }
         val storage = KeyStorage(repo, FakeWrapper())
-        val manager = SyncManager(repo, cloud, storage) { clock }
+        var sessionLost = 0
+        val manager = SyncManager(repo, cloud, storage, { clock }) { sessionLost++ }
         val state get() = manager.state.value
         suspend fun signIn() { repo.setState(StateKeys.UID, uid); manager.onSignedIn(true) }
         suspend fun titles() = repo.alive.first().map { it.title }.sorted()
@@ -159,5 +160,75 @@ class SyncManagerTest {
         assertFalse(cloud.content(uid, id)!!.contains("private"))
         assertFalse(cloud.checks[uid]!!.contains(KeyText.format(a.storage.load()!!)))
         assertEquals("very private text", NoteJson.parse(NoteCrypto.decrypt(a.storage.load()!!, cloud.content(uid, id)!!, id)!!)!!.title)
+    }
+
+    // ---- background sync: failures, ended session, what is due ----
+
+    @Test fun failuresAreCountedAndForgottenAfterASuccess() = runTest {
+        val a = Phone(); a.signIn(); a.manager.confirmKey()
+        assertEquals(0, a.state.failures)
+        cloud.offline = true
+        repeat(3) { a.manager.syncNow() }
+        assertEquals(3, a.state.failures)
+        repeat(10) { a.manager.syncNow() }
+        assertEquals("it stops at 6: the wait is then 64 times longer", SyncManager.MAX_FAILURES, a.state.failures)
+        cloud.offline = false
+        a.manager.syncNow()
+        assertEquals(0, a.state.failures)
+    }
+
+    @Test fun anEndedSessionSignsOutInsteadOfRetryingForever() = runTest {
+        val a = Phone(); a.signIn(); a.manager.confirmKey()
+        a.repo.add("x")
+        cloud.failAll = SyncException("SESSION_LOST", "gone")
+        a.manager.syncNow()
+        assertEquals(1, a.sessionLost)
+        assertEquals(SyncState(), a.state)                      // the sync is reset, the account signs out in ChaosApp
+    }
+
+    @Test fun offlineIsNeverTreatedAsAnEndedSession() = runTest {
+        val a = Phone(); a.signIn(); a.manager.confirmKey()
+        cloud.offline = true
+        repeat(3) { a.manager.syncNow() }
+        assertEquals(0, a.sessionLost)
+        assertTrue(a.state.signedIn)
+    }
+
+    @Test fun anEndedSessionDuringTheKeyCheckSignsOutToo() = runTest {
+        val a = Phone()
+        cloud.failAll = SyncException("SESSION_LOST", "gone")
+        a.signIn()
+        assertEquals(1, a.sessionLost)
+    }
+
+    @Test fun syncOrStartDoesNothingBeforeSignIn() = runTest {
+        val a = Phone()
+        a.manager.syncOrStart()
+        assertEquals(0, cloud.uploads)
+        assertEquals(0, cloud.pulls)
+    }
+
+    @Test fun syncOrStartSyncsWhenReady() = runTest {
+        val a = Phone(); a.signIn(); a.manager.confirmKey()
+        a.repo.add("later")
+        a.manager.syncOrStart()
+        assertEquals(1, cloud.docIds(uid).size)
+    }
+
+    @Test fun syncOrStartRetriesTheKeyCheckThatFailedOffline() = runTest {
+        val a = Phone(); a.manager.syncOrStart()                 // not signed in: nothing
+        cloud.offline = true
+        a.signIn()                                               // starts offline: the key can't be checked
+        assertEquals(KeyPhase.Unknown, a.state.phase)
+        cloud.offline = false
+        a.manager.syncOrStart()                                  // the next background run decides
+        assertEquals(KeyPhase.Save, a.state.phase)               // first device: a new key to save
+    }
+
+    @Test fun syncOrStartWaitsForTheUserWhenTheKeyIsNotSaved() = runTest {
+        val a = Phone(); a.repo.add("n"); a.signIn()
+        assertEquals(KeyPhase.Save, a.state.phase)
+        a.manager.syncOrStart()
+        assertEquals("nothing is uploaded before the key is confirmed", 0, cloud.uploads)
     }
 }

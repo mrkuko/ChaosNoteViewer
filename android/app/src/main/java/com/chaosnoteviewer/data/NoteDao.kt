@@ -43,9 +43,15 @@ interface NoteDao {
     @Query("UPDATE notes SET deleted_at = :now, updated_at = :now, dirty = 1 WHERE id = :id")
     suspend fun markDeleted(id: String, now: Long)
 
-    // notes written before any sign-in belong to the first account that signs in
-    @Query("UPDATE notes SET author_id = :uid, updated_at = :now, dirty = 1 WHERE author_id IS NULL")
-    suspend fun claim(uid: String, now: Long)
+    // Notes written before any sign-in belong to the first account that signs in. Those not on the server yet are
+    // queued for the sync (new updated_at, dirty)...
+    @Query("UPDATE notes SET author_id = :uid, updated_at = :now, dirty = 1 WHERE author_id IS NULL AND remote_updated_at IS NULL")
+    suspend fun claimUnsynced(uid: String, now: Long)
+
+    // ...but a note that is already in the cloud only gets its owner written down: touching its updated_at would
+    // make this device win over newer edits from another one, every time the app starts.
+    @Query("UPDATE notes SET author_id = :uid WHERE author_id IS NULL AND remote_updated_at IS NOT NULL")
+    suspend fun claimSynced(uid: String)
 
     @Query("UPDATE notes SET author_id = :newUid, updated_at = :now, dirty = 1 WHERE author_id = :oldUid")
     suspend fun rebind(oldUid: String, newUid: String, now: Long)
@@ -55,6 +61,13 @@ interface NoteDao {
     // changed here and not pushed yet, deleted notes included
     @Query("SELECT * FROM notes WHERE dirty = 1 ORDER BY updated_at ASC")
     suspend fun dirtyRows(): List<NoteEntity>
+
+    // how many notes wait for the next sync: the trigger of "sync soon after a change"
+    @Query("SELECT COUNT(*) FROM notes WHERE dirty = 1")
+    fun observeDirtyCount(): kotlinx.coroutines.flow.Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM notes WHERE dirty = 1")
+    suspend fun dirtyCount(): Int
 
     // stays dirty when the note was edited meanwhile (updated_at differs)
     @Query("UPDATE notes SET dirty = 0, remote_updated_at = :remoteMs WHERE id = :id AND updated_at = :updatedAt")

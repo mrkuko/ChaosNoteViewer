@@ -11,6 +11,7 @@ class FakeRemoteStore : RemoteStore {
     val notes = mutableMapOf<String, MutableMap<String, Doc>>()
     val checks = mutableMapOf<String, String>()
     var offline = false
+    var failAll: SyncException? = null          // every call fails with this (e.g. the session ended)
     var failNextUpload: SyncException? = null
     var uploads = 0              // calls, to see that an idle sync sends nothing
     var listIdsCalls = 0
@@ -20,7 +21,10 @@ class FakeRemoteStore : RemoteStore {
     private val base = Instant.parse("2026-01-01T00:00:00Z")
     private fun tick(): Instant = base.plusNanos(++counter * 1000)
     private fun docs(uid: String) = notes.getOrPut(uid) { mutableMapOf() }
-    private fun net() { if (offline) throw SyncException("NETWORK", "Could not reach Firestore.") }
+    private fun net() {
+        failAll?.let { throw it }
+        if (offline) throw SyncException("NETWORK", "Could not reach Firestore.")
+    }
 
     fun docIds(uid: String) = docs(uid).keys.toSet()
     fun content(uid: String, id: String) = docs(uid)[id]?.content
