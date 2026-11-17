@@ -279,10 +279,10 @@ PlasmoidItem {
                             opacity: 0.6
                             text: i18n("dragging is off")
                         }
-                        PlasmaComponents3.ToolButton {
+                        TextButton {
+                            quiet: true
                             text: i18n("Your order")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            flat: true
                             onClicked: ctl.setSortField(0)
                         }
                     }
@@ -588,26 +588,25 @@ PlasmoidItem {
                             }
                             RowLayout {
                                 spacing: Kirigami.Units.smallSpacing
-                                PlasmaComponents3.Button {
+                                TextButton {
                                     id: saveKeyButton
+                                    primary: true
                                     visible: keyBox.editing
                                     text: i18n("Save")
                                     enabled: apiKeyField.text.trim() !== ""
                                     onClicked: if (enabled) { ctl.setApiKey(apiKeyField.text); keyBox.editing = false }
                                 }
-                                PlasmaComponents3.Button {
-                                    flat: true
+                                TextButton {
                                     visible: keyBox.editing && ctl.configured
                                     text: i18n("Cancel")
                                     onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = false }
                                 }
-                                PlasmaComponents3.Button {
-                                    flat: true
+                                TextButton {
                                     visible: keyBox.editing && !ctl.configured && !ctl.setupSeen
                                     text: i18n("Skip for now")
                                     onClicked: { ctl.skipSetup(); root.settingsOpen = false }
                                 }
-                                PlasmaComponents3.Button {
+                                TextButton {
                                     visible: !keyBox.editing
                                     text: i18n("Edit")
                                     onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = true }
@@ -688,9 +687,8 @@ PlasmoidItem {
                                             opacity: 0.7
                                             text: i18n("The encryption key is not checked yet, so nothing syncs.")
                                         }
-                                        PlasmaComponents3.Button {
+                                        TextButton {
                                             text: i18n("Retry")
-                                            icon.name: "view-refresh"
                                             onClicked: ctl.startKeyFlow()
                                         }
                                     }
@@ -727,14 +725,13 @@ PlasmoidItem {
                                             }
                                         }
                                         RowLayout {
-                                            PlasmaComponents3.Button {
+                                            TextButton {
                                                 text: i18n("Copy key")
-                                                icon.name: "edit-copy"
                                                 onClicked: root.copyText(ctl.keyText())
                                             }
-                                            PlasmaComponents3.Button {
+                                            TextButton {
+                                                primary: true
                                                 text: i18n("I saved it")
-                                                icon.name: "dialog-ok"
                                                 onClicked: ctl.confirmKey()
                                             }
                                         }
@@ -764,9 +761,9 @@ PlasmoidItem {
                                                 function onKeyPhaseChanged() { keyField.text = "" }
                                             }
                                         }
-                                        PlasmaComponents3.Button {
+                                        TextButton {
+                                            primary: true
                                             text: i18n("Unlock")
-                                            icon.name: "unlock"
                                             enabled: !ctl.keyBusy && keyField.text.trim() !== ""
                                             onClicked: ctl.submitKey(keyField.text)
                                         }
@@ -778,14 +775,12 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         spacing: Kirigami.Units.smallSpacing
                                         RowLayout {
-                                            PlasmaComponents3.Button {
+                                            TextButton {
                                                 text: ctl.keyShown ? i18n("Hide key") : i18n("Show key")
-                                                icon.name: ctl.keyShown ? "hide_table_row" : "view-visible"
                                                 onClicked: ctl.toggleKeyShown()
                                             }
-                                            PlasmaComponents3.Button {
+                                            TextButton {
                                                 text: i18n("Copy key")
-                                                icon.name: "edit-copy"
                                                 onClicked: root.copyText(ctl.keyText())
                                             }
                                         }
@@ -821,9 +816,8 @@ PlasmoidItem {
                                     }
 
                                     // lost key
-                                    PlasmaComponents3.Button {
+                                    TextButton {
                                         visible: (ctl.keyPhase === "enter" || ctl.keyPhase === "ready") && !ctl.resetOpen
-                                        flat: true
                                         text: ctl.keyPhase === "enter" ? i18n("Lost the key? Reset…") : i18n("Reset key…")
                                         enabled: !ctl.keyBusy
                                         onClicked: ctl.resetOpen = true
@@ -839,14 +833,13 @@ PlasmoidItem {
                                             text: i18n("This deletes ALL notes from the cloud and creates a new key. The notes on this device stay and are uploaded again, encrypted with the new key. Notes that exist only in the cloud or only on other devices are gone from the cloud. Other devices will ask for the new key.")
                                         }
                                         RowLayout {
-                                            PlasmaComponents3.Button {
+                                            TextButton {
+                                                destructive: true
                                                 text: i18n("Delete cloud notes and make a new key")
-                                                icon.name: "edit-delete"
                                                 enabled: !ctl.keyBusy
                                                 onClicked: ctl.resetKey()
                                             }
-                                            PlasmaComponents3.Button {
-                                                flat: true
+                                            TextButton {
                                                 text: i18n("Cancel")
                                                 enabled: !ctl.keyBusy
                                                 onClicked: ctl.resetOpen = false
@@ -855,9 +848,8 @@ PlasmoidItem {
                                     }
                                 }
 
-                                PlasmaComponents3.Button {
+                                TextButton {
                                     text: i18n("Sign out")
-                                    icon.name: "system-log-out"
                                     onClicked: ctl.signOut()
                                 }
                             }
@@ -892,20 +884,18 @@ PlasmoidItem {
                                 RowLayout {
                                     spacing: Kirigami.Units.smallSpacing
 
-                                    PlasmaComponents3.Button {
+                                    TextButton {
+                                        primary: true
                                         text: i18n("Continue")
-                                        icon.name: "dialog-ok"
                                         enabled: !ctl.authBusy
                                         onClicked: ctl.checkVerified()
                                     }
-                                    PlasmaComponents3.Button {
+                                    TextButton {
                                         text: i18n("Resend email")
-                                        icon.name: "mail-send"
                                         enabled: !ctl.authBusy
                                         onClicked: ctl.resendVerification()
                                     }
-                                    PlasmaComponents3.Button {
-                                        flat: true
+                                    TextButton {
                                         text: i18n("Cancel")
                                         enabled: !ctl.authBusy
                                         onClicked: ctl.cancelPending()
@@ -972,23 +962,22 @@ PlasmoidItem {
                                     visible: ctl.configured
                                     spacing: Kirigami.Units.smallSpacing
 
-                                    PlasmaComponents3.Button {
+                                    TextButton {
                                         id: signInButton
+                                        primary: true
                                         text: i18n("Sign in")
-                                        icon.name: "user-identity"
                                         enabled: !ctl.authBusy && emailField.text.trim() !== "" && passwordField.text !== ""
                                         onClicked: {
                                             if (enabled)
                                                 ctl.authenticate(false, emailField.text.trim(), passwordField.text)
                                         }
                                     }
-                                    PlasmaComponents3.Button {
+                                    TextButton {
                                         text: i18n("Create account")
                                         enabled: signInButton.enabled
                                         onClicked: ctl.authenticate(true, emailField.text.trim(), passwordField.text)
                                     }
-                                    PlasmaComponents3.Button {
-                                        flat: true
+                                    TextButton {
                                         text: i18n("Forgot password?")
                                         enabled: !ctl.authBusy
                                         onClicked: ctl.resetPassword(emailField.text.trim())
@@ -1155,8 +1144,11 @@ PlasmoidItem {
                     Layout.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaComponents3.ToolButton {
-                        icon.name: "go-previous"
+                    TextButton {
+                        quiet: true
+                        leftPadding: Kirigami.Units.largeSpacing
+                        rightPadding: Kirigami.Units.largeSpacing
+                        text: "←"
                         onClicked: root.detailId = ""
                         PlasmaComponents3.ToolTip { text: i18n("Back") }
                     }
@@ -1326,8 +1318,11 @@ PlasmoidItem {
                     Layout.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaComponents3.ToolButton {
-                        icon.name: "go-previous"
+                    TextButton {
+                        quiet: true
+                        leftPadding: Kirigami.Units.largeSpacing
+                        rightPadding: Kirigami.Units.largeSpacing
+                        text: "←"
                         onClicked: addOverlay.close()
                         PlasmaComponents3.ToolTip { text: i18n("Cancel") }
                     }
@@ -1337,9 +1332,9 @@ PlasmoidItem {
                         level: 3
                         text: addOverlay.editing ? i18n("Edit note") : i18n("New note")
                     }
-                    PlasmaComponents3.Button {
+                    TextButton {
+                        primary: true
                         text: addOverlay.editing ? i18n("Save") : i18n("Add")
-                        icon.name: addOverlay.editing ? "document-save" : "list-add"
                         enabled: titleField.text.trim() !== ""
                         onClicked: addOverlay.submit()
                     }
@@ -1408,14 +1403,14 @@ PlasmoidItem {
                                 opacity: addOverlay.due > 0 ? 1 : 0.6
                                 elide: Text.ElideRight
                             }
-                            PlasmaComponents3.Button {
+                            TextButton {
                                 text: i18n("Today")
                                 onClicked: {
                                     addOverlay.due = ctl.startOfToday()
                                     calendar.showMonthOf(addOverlay.due)
                                 }
                             }
-                            PlasmaComponents3.Button {
+                            TextButton {
                                 text: i18n("Clear")
                                 enabled: addOverlay.due > 0
                                 onClicked: addOverlay.due = 0
@@ -1482,13 +1477,14 @@ PlasmoidItem {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
                         Item { Layout.fillWidth: true }
-                        PlasmaComponents3.Button {
+                        TextButton {
                             text: i18n("Cancel")
                             onClicked: { root.confirmDeleteCount = 0; root.confirmNoteId = "" }
                         }
-                        PlasmaComponents3.Button {
+                        TextButton {
+                            destructive: true
+                            primary: true
                             text: root.confirmNoteId !== "" ? i18n("Delete") : i18n("Delete all")
-                            icon.name: "edit-delete"
                             onClicked: {
                                 if (root.confirmNoteId !== "") {
                                     ctl.removeNote(root.confirmNoteId)

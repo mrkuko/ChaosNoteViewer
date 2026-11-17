@@ -76,6 +76,7 @@ qt_add_qml_module(chaosnoteviewer
         qml/NavButton.qml
         qml/NotesList.qml
         qml/SettingsPage.qml
+        qml/TextButton.qml
         qml/Theme.qml
         qml/TrayController.qml
         ${SHARED_FILES}

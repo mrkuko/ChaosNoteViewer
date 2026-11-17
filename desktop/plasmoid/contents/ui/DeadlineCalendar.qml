@@ -45,8 +45,11 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
 
-        PlasmaComponents3.ToolButton {
-            icon.name: "go-previous"
+        TextButton {
+            quiet: true
+            leftPadding: Kirigami.Units.largeSpacing
+            rightPadding: Kirigami.Units.largeSpacing
+            text: "‹"
             onClicked: cal.step(-1)
         }
         Kirigami.Heading {
@@ -55,8 +58,11 @@ ColumnLayout {
             level: 5
             text: Qt.locale().standaloneMonthName(cal.viewMonth, Locale.LongFormat) + " " + cal.viewYear
         }
-        PlasmaComponents3.ToolButton {
-            icon.name: "go-next"
+        TextButton {
+            quiet: true
+            leftPadding: Kirigami.Units.largeSpacing
+            rightPadding: Kirigami.Units.largeSpacing
+            text: "›"
             onClicked: cal.step(1)
         }
     }

@@ -70,26 +70,25 @@ ScrollView {
             }
             RowLayout {
                 spacing: Theme.small
-                Button {
+                TextButton {
                     id: saveKeyButton
+                    primary: true
                     visible: keyBox.editing
                     text: qsTr("Save")
                     enabled: apiKeyField.text.trim() !== ""
                     onClicked: if (enabled) { ctl.setApiKey(apiKeyField.text); keyBox.editing = false }
                 }
-                Button {
-                    flat: true
+                TextButton {
                     visible: keyBox.editing && ctl.configured
                     text: qsTr("Cancel")
                     onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = false }
                 }
-                Button {
-                    flat: true
+                TextButton {
                     visible: keyBox.editing && !ctl.configured && !ctl.setupSeen
                     text: qsTr("Skip for now")
                     onClicked: { ctl.skipSetup(); page.app.settingsOpen = false }
                 }
-                Button {
+                TextButton {
                     visible: !keyBox.editing
                     text: qsTr("Edit")
                     onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = true }
@@ -171,7 +170,7 @@ ScrollView {
                         opacity: 0.7
                         text: qsTr("The encryption key is not checked yet, so nothing syncs.")
                     }
-                    Button {
+                    TextButton {
                         text: qsTr("Retry")
                         onClicked: ctl.startKeyFlow()
                     }
@@ -209,11 +208,12 @@ ScrollView {
                         }
                     }
                     RowLayout {
-                        Button {
+                        TextButton {
                             text: qsTr("Copy key")
                             onClicked: page.app.copyText(ctl.keyText())
                         }
-                        Button {
+                        TextButton {
+                            primary: true
                             text: qsTr("I saved it")
                             onClicked: ctl.confirmKey()
                         }
@@ -244,7 +244,8 @@ ScrollView {
                             function onKeyPhaseChanged() { keyField.text = "" }
                         }
                     }
-                    Button {
+                    TextButton {
+                        primary: true
                         text: qsTr("Unlock")
                         enabled: !ctl.keyBusy && keyField.text.trim() !== ""
                         onClicked: ctl.submitKey(keyField.text)
@@ -257,11 +258,11 @@ ScrollView {
                     Layout.fillWidth: true
                     spacing: Theme.small
                     RowLayout {
-                        Button {
+                        TextButton {
                             text: ctl.keyShown ? qsTr("Hide key") : qsTr("Show key")
                             onClicked: ctl.toggleKeyShown()
                         }
-                        Button {
+                        TextButton {
                             text: qsTr("Copy key")
                             onClicked: page.app.copyText(ctl.keyText())
                         }
@@ -298,9 +299,8 @@ ScrollView {
                 }
 
                 // lost key
-                Button {
+                TextButton {
                     visible: (ctl.keyPhase === "enter" || ctl.keyPhase === "ready") && !ctl.resetOpen
-                    flat: true
                     text: ctl.keyPhase === "enter" ? qsTr("Lost the key? Reset…") : qsTr("Reset key…")
                     enabled: !ctl.keyBusy
                     onClicked: ctl.resetOpen = true
@@ -316,13 +316,13 @@ ScrollView {
                         text: qsTr("This deletes ALL notes from the cloud and creates a new key. The notes on this device stay and are uploaded again, encrypted with the new key. Notes that exist only in the cloud or only on other devices are gone from the cloud. Other devices will ask for the new key.")
                     }
                     RowLayout {
-                        Button {
+                        TextButton {
+                            destructive: true
                             text: qsTr("Delete cloud notes and make a new key")
                             enabled: !ctl.keyBusy
                             onClicked: ctl.resetKey()
                         }
-                        Button {
-                            flat: true
+                        TextButton {
                             text: qsTr("Cancel")
                             enabled: !ctl.keyBusy
                             onClicked: ctl.resetOpen = false
@@ -331,7 +331,7 @@ ScrollView {
                 }
             }
 
-            Button {
+            TextButton {
                 text: qsTr("Sign out")
                 onClicked: ctl.signOut()
             }
@@ -366,18 +366,18 @@ ScrollView {
             }
             RowLayout {
                 spacing: Theme.small
-                Button {
+                TextButton {
+                    primary: true
                     text: qsTr("Continue")
                     enabled: !ctl.authBusy
                     onClicked: ctl.checkVerified()
                 }
-                Button {
+                TextButton {
                     text: qsTr("Resend email")
                     enabled: !ctl.authBusy
                     onClicked: ctl.resendVerification()
                 }
-                Button {
-                    flat: true
+                TextButton {
                     text: qsTr("Cancel")
                     enabled: !ctl.authBusy
                     onClicked: ctl.cancelPending()
@@ -444,8 +444,9 @@ ScrollView {
                 visible: ctl.configured
                 spacing: Theme.small
 
-                Button {
+                TextButton {
                     id: signInButton
+                    primary: true
                     text: qsTr("Sign in")
                     enabled: !ctl.authBusy && emailField.text.trim() !== "" && passwordField.text !== ""
                     onClicked: {
@@ -453,13 +454,12 @@ ScrollView {
                             ctl.authenticate(false, emailField.text.trim(), passwordField.text)
                     }
                 }
-                Button {
+                TextButton {
                     text: qsTr("Create account")
                     enabled: signInButton.enabled
                     onClicked: ctl.authenticate(true, emailField.text.trim(), passwordField.text)
                 }
-                Button {
-                    flat: true
+                TextButton {
                     text: qsTr("Forgot password?")
                     enabled: !ctl.authBusy
                     onClicked: ctl.resetPassword(emailField.text.trim())

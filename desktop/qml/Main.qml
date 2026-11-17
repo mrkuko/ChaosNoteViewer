@@ -224,7 +224,8 @@ ApplicationWindow {
                         opacity: 0.6
                         text: qsTr("dragging is off")
                     }
-                    ToolButton {
+                    TextButton {
+                        quiet: true
                         text: qsTr("Your order")
                         font.pointSize: Theme.smallFont
                         onClicked: ctl.setSortField(0)

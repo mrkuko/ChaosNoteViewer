@@ -44,7 +44,10 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
 
-        ToolButton {
+        TextButton {
+            quiet: true
+            leftPadding: Theme.medium
+            rightPadding: Theme.medium
             text: "‹"
             onClicked: cal.step(-1)
         }
@@ -54,7 +57,10 @@ ColumnLayout {
             font.bold: true
             text: Qt.locale().standaloneMonthName(cal.viewMonth, Locale.LongFormat) + " " + cal.viewYear
         }
-        ToolButton {
+        TextButton {
+            quiet: true
+            leftPadding: Theme.medium
+            rightPadding: Theme.medium
             text: "›"
             onClicked: cal.step(1)
         }

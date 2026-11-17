@@ -50,7 +50,10 @@ Rectangle {
             Layout.margins: Theme.small
             spacing: Theme.small
 
-            ToolButton {
+            TextButton {
+                quiet: true
+                leftPadding: Theme.medium
+                rightPadding: Theme.medium
                 text: "←"
                 onClicked: page.close()
                 ToolTip.text: qsTr("Cancel")
@@ -64,7 +67,8 @@ Rectangle {
                 font.bold: true
                 text: page.editing ? qsTr("Edit note") : qsTr("New note")
             }
-            Button {
+            TextButton {
+                primary: true
                 text: page.editing ? qsTr("Save") : qsTr("Add")
                 enabled: titleField.text.trim() !== ""
                 onClicked: page.submit()
@@ -135,14 +139,14 @@ Rectangle {
                         opacity: page.due > 0 ? 1 : 0.6
                         elide: Text.ElideRight
                     }
-                    Button {
+                    TextButton {
                         text: qsTr("Today")
                         onClicked: {
                             page.due = ctl.startOfToday()
                             calendar.showMonthOf(page.due)
                         }
                     }
-                    Button {
+                    TextButton {
                         text: qsTr("Clear")
                         enabled: page.due > 0
                         onClicked: page.due = 0

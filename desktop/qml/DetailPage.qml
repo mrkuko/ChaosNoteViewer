@@ -31,7 +31,10 @@ Rectangle {
             Layout.margins: Theme.small
             spacing: Theme.small
 
-            ToolButton {
+            TextButton {
+                quiet: true
+                leftPadding: Theme.medium
+                rightPadding: Theme.medium
                 text: "←"
                 onClicked: app.detailId = ""
                 ToolTip.text: qsTr("Back")

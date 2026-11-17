@@ -57,11 +57,13 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: Theme.small
                 Item { Layout.fillWidth: true }
-                Button {
+                TextButton {
                     text: qsTr("Cancel")
                     onClicked: page.cancel()
                 }
-                Button {
+                TextButton {
+                    destructive: true
+                    primary: true
                     text: app.confirmNoteId !== "" ? qsTr("Delete") : qsTr("Delete all")
                     onClicked: {
                         if (app.confirmNoteId !== "") {
