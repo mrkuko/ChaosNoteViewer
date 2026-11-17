@@ -26,6 +26,9 @@ object StateKeys {
     const val CURSOR_ID = "cursor_id"
     const val SORT_FIELD = "sort_field"
     const val SORT_DESC = "sort_desc"
+    // the Important list keeps its own sort (UPCOMING is only valid there); the other lists share sort_field/sort_desc
+    const val IMPORTANT_SORT_FIELD = "important_sort_field"
+    const val IMPORTANT_SORT_DESC = "important_sort_desc"
     // per-device switch (not synced): starred notes first, in front of whatever order is chosen; "1" = on
     const val STARRED_FIRST = "starred_first"
     // the encryption key of the cloud copy, wrapped by the Android Keystore (crypto/KeyStorage.kt), and whether

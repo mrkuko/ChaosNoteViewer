@@ -104,4 +104,35 @@ class NoteQueryTest {
         val notes = listOf(note("a", 1.0), star(note("b", 2.0)))
         assertEquals(listOf("a", "b"), titles(NoteQuery.shown(notes, NoteFilter.ALL, SortField.OWN, false, today, collator)))
     }
+
+    // Important: due today or later first (closest first), then the overdue ones, most recently missed first
+    @Test fun upcomingThenOverdue() {
+        val notes = listOf(
+            note("late5", 1.0, due = today - 5 * DAY_MS), note("in2", 2.0, due = today + 2 * DAY_MS),
+            note("late1", 3.0, due = today - DAY_MS), note("today", 4.0, due = today),
+            note("in1", 5.0, due = today + DAY_MS),
+        )
+        assertEquals(listOf("today", "in1", "in2", "late1", "late5"), shown(notes, NoteFilter.IMPORTANT, SortField.UPCOMING))
+    }
+
+    @Test fun upcomingTiesKeepYourOrder() {
+        val notes = listOf(note("b", 2.0, due = today), note("a", 1.0, due = today))
+        assertEquals(listOf("a", "b"), shown(notes, NoteFilter.IMPORTANT, SortField.UPCOMING))
+    }
+
+    @Test fun upcomingStarsLeadInsideEachPartNeverAcross() {
+        val notes = listOf(
+            note("soon", 1.0, due = today), star(note("soon*", 2.0, due = today + DAY_MS)),
+            note("late", 3.0, due = today - DAY_MS), star(note("late*", 4.0, due = today - 2 * DAY_MS)),
+        )
+        assertEquals(
+            listOf("soon*", "soon", "late*", "late"),
+            titles(NoteQuery.shown(notes, NoteFilter.IMPORTANT, SortField.UPCOMING, false, today, collator, starredFirst = true)),
+        )
+    }
+
+    @Test fun upcomingIsOnlyOfferedInImportant() {
+        assertEquals(SortField.UPCOMING, SortField.offeredIn(NoteFilter.IMPORTANT).first())
+        assertFalse(SortField.UPCOMING in SortField.offeredIn(NoteFilter.OPEN))
+    }
 }

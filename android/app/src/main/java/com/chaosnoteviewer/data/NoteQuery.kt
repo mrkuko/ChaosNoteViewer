@@ -24,10 +24,20 @@ enum class SortField(val label: String, val ascending: String, val descending: S
     OWN("Your order", "", ""),
     NAME("Name", "A–Z", "Z–A"),
     DEADLINE("Deadline", "Closest first", "Furthest first"),
-    CREATED("Date created", "Oldest first", "Newest first");
+    CREATED("Date created", "Oldest first", "Newest first"),
+    // Important only: notes due today or later, the closest first, then the overdue ones, the most recently missed
+    // first (the longest overdue at the very bottom). No direction to flip. Anywhere else it is not valid.
+    UPCOMING("Upcoming, then overdue", "", "");
 
     // choosing a field starts with its natural direction: A-Z, closest first, newest first
     val defaultDesc: Boolean get() = this == CREATED
+
+    // the fields the sort menu offers in [filter], in menu order
+    companion object {
+        fun offeredIn(filter: NoteFilter): List<SortField> =
+            if (filter == NoteFilter.IMPORTANT) listOf(UPCOMING, OWN, NAME, DEADLINE, CREATED)
+            else listOf(OWN, NAME, DEADLINE, CREATED)
+    }
 }
 
 object NoteQuery {
@@ -65,6 +75,12 @@ object NoteQuery {
         fun lead(l: List<NoteEntity>) = if (starredFirst) l.sortedByDescending { it.starred } else l
         if (sort == SortField.OWN)
             return lead(rows)
+        if (sort == SortField.UPCOMING) {
+            // the stars lead inside each of the two parts, never across them
+            val (late, soon) = rows.partition { isOverdue(it, startOfToday) }
+            return lead(soon.sortedWith(compareBy<NoteEntity> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.position })) +
+                lead(late.sortedWith(compareByDescending<NoteEntity> { it.dueDate }.thenBy { it.position }))
+        }
         val dir = if (desc) -1 else 1
         val cmp = Comparator<NoteEntity> { a, b ->
             val d = when (sort) {
@@ -76,7 +92,7 @@ object NoteQuery {
                     else -> 0
                 }
                 SortField.CREATED -> a.createdAt.compareTo(b.createdAt) * dir
-                SortField.OWN -> 0
+                SortField.OWN, SortField.UPCOMING -> 0
             }
             if (d != 0) d else a.position.compareTo(b.position)
         }

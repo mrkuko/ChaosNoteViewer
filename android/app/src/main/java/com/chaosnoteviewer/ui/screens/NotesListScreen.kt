@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -235,13 +237,13 @@ private val NoteFilter.iconName: String
 @Composable
 private fun SortMenu(state: ListState, expanded: Boolean, onDismiss: () -> Unit, onSort: (SortField, Boolean) -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        for (field in SortField.entries) {
+        for (field in SortField.offeredIn(state.filter)) {
             val current = state.sort == field
             DropdownMenuItem(
                 text = {
                     Column {
                         Text(field.label)
-                        if (current && field != SortField.OWN)
+                        if (current && field != SortField.OWN && field != SortField.UPCOMING)
                             Text(
                                 (if (state.desc) field.descending else field.ascending) + " · tap to flip",
                                 style = MaterialTheme.typography.bodySmall,
@@ -251,7 +253,7 @@ private fun SortMenu(state: ListState, expanded: Boolean, onDismiss: () -> Unit,
                 },
                 leadingIcon = { if (current) AppIcon("check") },
                 onClick = {
-                    if (current && field != SortField.OWN) onSort(field, !state.desc)
+                    if (current && field != SortField.OWN && field != SortField.UPCOMING) onSort(field, !state.desc)
                     else onSort(field, field.defaultDesc)
                     onDismiss()
                 },
@@ -291,7 +293,11 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
     }
 
     LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 88.dp), modifier = Modifier.fillMaxSize()) {
+        // in the Upcoming order the overdue notes come last, under a divider
+        val firstOverdue = if (state.sort == SortField.UPCOMING)
+            rows.indexOfFirst { it.dueDate != null && it.dueDate < state.startOfToday } else -1
         itemsIndexed(rows, key = { _, note -> note.id }) { index, note ->
+            if (index == firstOverdue) OverdueDivider(Modifier.animateItem())
             val ghost = state.ghosts[note.id]
             if (ghost != null) {
                 // just swiped: the row stays here for a few seconds, with a way back
@@ -345,6 +351,24 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
             }
             HorizontalDivider()
         }
+    }
+}
+
+// A thin red line, the calendar-alert icon and "Overdue", where the overdue notes start.
+@Composable
+private fun OverdueDivider(modifier: Modifier = Modifier) {
+    val red = MaterialTheme.colorScheme.error
+    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        HorizontalDivider(Modifier.width(16.dp), color = red)
+        AppIcon("calendar-alert", tint = red, size = 16.dp, modifier = Modifier.padding(start = 8.dp))
+        Text(
+            "Overdue",
+            Modifier.padding(horizontal = 6.dp),
+            color = red,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        HorizontalDivider(Modifier.weight(1f), color = red)
     }
 }
 

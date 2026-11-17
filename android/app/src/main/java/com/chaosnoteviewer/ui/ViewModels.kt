@@ -47,7 +47,8 @@ data class ListState(
     val sorted: Boolean get() = sort != SortField.OWN
     // a forced order of any kind: dragging to reorder is off
     val dragLocked: Boolean get() = sorted || starredFirst
-    val sortText: String get() = if (sorted) "${sort.label}: ${if (desc) sort.descending else sort.ascending}" else sort.label
+    val sortText: String get() =
+        if (sorted && sort != SortField.UPCOMING) "${sort.label}: ${if (desc) sort.descending else sort.ascending}" else sort.label
 }
 
 class NotesViewModel(
@@ -59,7 +60,12 @@ class NotesViewModel(
     private val filter = MutableStateFlow(NoteFilter.OPEN)
     private val recent = MutableStateFlow<Map<String, RecentChange>>(emptyMap())
     private val ghostTimers = HashMap<String, Job>()
-    private val sort = MutableStateFlow(SortField.OWN to false)
+    // each view keeps its own sort: the Important list and the others (Open, Completed, All)
+    private val generalSort = MutableStateFlow(SortField.OWN to false)
+    private val importantSort = MutableStateFlow(SortField.UPCOMING to false)
+    private val sort = combine(filter, generalSort, importantSort) { f, g, i ->
+        if (f == NoteFilter.IMPORTANT) i else g
+    }
     private val starredFirst = MutableStateFlow(false)
 
     // local midnight of today, emitted again right after each midnight (overdue / Important depend on it)
@@ -90,11 +96,16 @@ class NotesViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListState())
 
     init {
-        // the sort is kept on this device (sync_state), like on desktop; the filter starts at Open
+        // the sorts are kept on this device (sync_state), like on desktop; the filter starts at Open
         viewModelScope.launch {
-            val field = repo.getState(StateKeys.SORT_FIELD).toIntOrNull()
-            if (field != null && field in SortField.entries.indices)
-                sort.value = SortField.entries[field] to (repo.getState(StateKeys.SORT_DESC) == "1")
+            suspend fun load(fieldKey: String, descKey: String, allowed: Boolean): Pair<SortField, Boolean>? {
+                val field = repo.getState(fieldKey).toIntOrNull()?.let { SortField.entries.getOrNull(it) } ?: return null
+                // UPCOMING saved for a list that cannot have it falls back to your order
+                return if (field == SortField.UPCOMING && !allowed) SortField.OWN to false
+                else field to (repo.getState(descKey) == "1")
+            }
+            load(StateKeys.SORT_FIELD, StateKeys.SORT_DESC, false)?.let { generalSort.value = it }
+            load(StateKeys.IMPORTANT_SORT_FIELD, StateKeys.IMPORTANT_SORT_DESC, true)?.let { importantSort.value = it }
             starredFirst.value = repo.getState(StateKeys.STARRED_FIRST) == "1"
         }
     }
@@ -105,10 +116,12 @@ class NotesViewModel(
     }
 
     fun setSort(field: SortField, desc: Boolean = field.defaultDesc) {
-        sort.value = field to desc
+        val important = filter.value == NoteFilter.IMPORTANT
+        if (field == SortField.UPCOMING && !important) return
+        (if (important) importantSort else generalSort).value = field to desc
         viewModelScope.launch {
-            repo.setState(StateKeys.SORT_FIELD, field.ordinal.toString())
-            repo.setState(StateKeys.SORT_DESC, if (desc) "1" else "0")
+            repo.setState(if (important) StateKeys.IMPORTANT_SORT_FIELD else StateKeys.SORT_FIELD, field.ordinal.toString())
+            repo.setState(if (important) StateKeys.IMPORTANT_SORT_DESC else StateKeys.SORT_DESC, if (desc) "1" else "0")
         }
     }
 
