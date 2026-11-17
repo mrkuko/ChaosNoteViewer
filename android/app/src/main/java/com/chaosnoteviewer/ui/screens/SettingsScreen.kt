@@ -301,7 +301,7 @@ private fun KeyBlock(block: String) {
 private fun formatTime(ms: Long): String =
     Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT))
 
-// ---- reminders, the count on the icon, the widget ----
+// ---- reminders, the widget ----
 
 @Composable
 private fun ExtrasSection() {
@@ -309,27 +309,18 @@ private fun ExtrasSection() {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var blocked by rememberSaveable { mutableStateOf(false) }
-    // the switch that waits for the answer of the permission dialog: "reminders" or "badge"
-    var pending by rememberSaveable { mutableStateOf("") }
-
-    fun apply(which: String) {
-        if (which == "reminders") vm.setReminders(true) else vm.setCountBadge(true)
-    }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        val which = pending
-        pending = ""
         blocked = !granted
-        if (granted && which.isNotEmpty()) apply(which)
+        if (granted) vm.setReminders(true)
     }
 
-    // turning a switch on needs the notification permission (Android 13+) and notifications not blocked
-    fun turnOn(which: String) {
+    // turning the switch on needs the notification permission (Android 13+) and notifications not blocked
+    fun turnOn() {
         blocked = false
         when {
-            Notifications.canPost(context) -> apply(which)
+            Notifications.canPost(context) -> vm.setReminders(true)
             Build.VERSION.SDK_INT >= 33 && !Notifications.permissionDenied(context) -> {
-                pending = which
                 Notifications.rememberAsked(context)
                 permission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -340,15 +331,9 @@ private fun ExtrasSection() {
     Text("Reminders and widget", style = MaterialTheme.typography.titleMedium)
     SwitchRow(
         title = "Remind me about deadlines",
-        text = "Every morning around 8:00, a notification with the notes that are due today or overdue.",
+        text = "Every morning around 8:00, one notification for each note that is due today or overdue.",
         checked = state.reminders,
-        onChange = { if (it) turnOn("reminders") else vm.setReminders(false) },
-    )
-    SwitchRow(
-        title = "Show open notes on the app icon",
-        text = "A quiet notification with the number of open notes. Whether the launcher shows the number or only a dot depends on the launcher.",
-        checked = state.countBadge,
-        onChange = { if (it) turnOn("badge") else vm.setCountBadge(false) },
+        onChange = { if (it) turnOn() else vm.setReminders(false) },
     )
     if (blocked)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

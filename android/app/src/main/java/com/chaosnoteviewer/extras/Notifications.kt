@@ -18,14 +18,16 @@ import com.chaosnoteviewer.data.NoteEntity
 import com.chaosnoteviewer.data.NoteFilter
 import com.chaosnoteviewer.data.NoteQuery
 
-// The two notifications of the app. Both only show the number of notes and note titles the user wrote, nothing from
-// the cloud; the count one is hidden on the lock screen.
+// The reminders of the app: one notification for every note that is due today or overdue, like a message from a
+// social app (the note title, a line of its text, when it is due), all in one group. They only show what the user
+// wrote in the notes, nothing from the cloud.
 object Notifications {
     const val CHANNEL_DEADLINES = "deadlines"
-    const val CHANNEL_COUNT = "open_count"
-    const val ID_DEADLINES = 2
-    const val ID_COUNT = 1
-    private const val MAX_LINES = 5
+    // The notification that heads the group. It stays as long as any reminder is showing: Android removes every
+    // notification of a group when its summary is cancelled, and with a single reminder it shows that one alone.
+    const val ID_SUMMARY = 2
+    const val GROUP = "deadlines"
+    private const val LEGACY_CHANNEL_COUNT = "open_count"
 
     fun canPost(context: Context): Boolean =
         NotificationManagerCompat.from(context).areNotificationsEnabled() &&
@@ -43,18 +45,17 @@ object Notifications {
     }
 
     private fun ensureChannels(context: Context) {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_DEADLINES, "Deadlines", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Notes that are due today or overdue"
+                description = "A reminder for every note that is due today or overdue"
             },
         )
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_COUNT, "Open notes count", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "A quiet notification that puts the number of open notes on the app icon"
-                setShowBadge(true)
-            },
-        )
+    }
+
+    // The permanent "N open notes" notification of older versions is gone; deleting its channel also removes the
+    // notification that may still be showing. Called at every start, it costs nothing.
+    fun removeLegacy(context: Context) {
+        context.getSystemService(NotificationManager::class.java).deleteNotificationChannel(LEGACY_CHANNEL_COUNT)
     }
 
     private fun openApp(context: Context, request: LaunchRequest, requestCode: Int): PendingIntent =
@@ -63,66 +64,82 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+    private fun doneAction(context: Context, note: NoteEntity): NotificationCompat.Action {
+        val intent = Intent(context, NoteActionReceiver::class.java)
+            .setAction(NoteActionReceiver.ACTION_DONE)
+            .putExtra(NoteActionReceiver.EXTRA_NOTE_ID, note.id)
+        val pending = PendingIntent.getBroadcast(
+            context, ReminderText.notificationId(note.id), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Action.Builder(0, "Done", pending).build()
+    }
+
     // ---- deadlines ----
 
-    fun deadlineText(note: NoteEntity, startOfToday: Long) =
-        (if (NoteQuery.isOverdue(note, startOfToday)) "Overdue: " else "Today: ") + note.title
-
-    fun deadlineTitle(summary: DeadlineSummary) =
-        if (summary.total == 1) "1 note is due today or overdue" else "${summary.total} notes are due today or overdue"
-
-    // Posts (or updates) the reminder; [alert] false = silent (a refresh because the notes changed).
+    // The reminders of [summary]: a notification for each of the first notes, a summary above them when there is
+    // above them, and no notification for a note that no longer belongs here (done, deleted, deadline moved).
+    // [alert] false = silent (a refresh because the notes changed, not the morning check).
     fun showDeadlines(context: Context, summary: DeadlineSummary, startOfToday: Long, alert: Boolean) {
         if (summary.isEmpty || !canPost(context)) {
             cancelDeadlines(context)
             return
         }
         ensureChannels(context)
-        val lines = (summary.overdue + summary.today)
+        val manager = NotificationManagerCompat.from(context)
+        val (notes, more) = summary.forNotifications()
+
+        val keep = notes.map { ReminderText.notificationId(it.id) }.toSet()
+        for (active in shownReminders(context))
+            if (active.id !in keep && active.id != ID_SUMMARY) manager.cancel(active.id)
+
+        for (note in notes) {
+            val line = ReminderText.deadline(note, startOfToday)
+            val text = ReminderText.firstLine(note.description)
+            val builder = NotificationCompat.Builder(context, CHANNEL_DEADLINES)
+                .setSmallIcon(R.drawable.ic_stat_notes)
+                .setContentTitle(note.title)
+                .setContentText(text.ifEmpty { line })
+                .setContentIntent(openApp(context, LaunchRequest(noteId = note.id), ReminderText.notificationId(note.id)))
+                .addAction(doneAction(context, note))
+                .setGroup(GROUP)
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(!alert)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setShowWhen(false)
+            if (text.isNotEmpty()) builder.setSubText(line)
+            if (note.description.isNotBlank()) builder.setStyle(NotificationCompat.BigTextStyle().bigText(note.description.trim()))
+            manager.notify(ReminderText.notificationId(note.id), builder.build())
+        }
+
         val style = NotificationCompat.InboxStyle().also { s ->
-            lines.take(MAX_LINES).forEach { s.addLine(deadlineText(it, startOfToday)) }
-            if (lines.size > MAX_LINES) s.setSummaryText("+${lines.size - MAX_LINES} more")
+            notes.forEach { s.addLine(it.title) }
+            if (more > 0) s.setSummaryText("+$more more")
         }
-        val notification = NotificationCompat.Builder(context, CHANNEL_DEADLINES)
-            .setSmallIcon(R.drawable.ic_stat_notes)
-            .setContentTitle(deadlineTitle(summary))
-            .setContentText(deadlineText(lines.first(), startOfToday))
-            .setStyle(style)
-            .setContentIntent(openApp(context, LaunchRequest(filter = NoteFilter.IMPORTANT), 20))
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(!alert)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .build()
-        NotificationManagerCompat.from(context).notify(ID_DEADLINES, notification)
+        manager.notify(
+            ID_SUMMARY,
+            NotificationCompat.Builder(context, CHANNEL_DEADLINES)
+                .setSmallIcon(R.drawable.ic_stat_notes)
+                .setContentTitle(if (summary.total == 1) "1 note is due today or overdue" else "${summary.total} notes are due today or overdue")
+                .setStyle(style)
+                .setGroup(GROUP)
+                .setGroupSummary(true)
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+                .setContentIntent(openApp(context, LaunchRequest(filter = NoteFilter.IMPORTANT), 20))
+                .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .build(),
+        )
     }
 
-    fun cancelDeadlines(context: Context) = NotificationManagerCompat.from(context).cancel(ID_DEADLINES)
+    // every reminder that is on the screen now (the summary included)
+    private fun shownReminders(context: Context) =
+        context.getSystemService(NotificationManager::class.java).activeNotifications.filter { it.notification.group == GROUP }
 
-    fun deadlinesShown(context: Context): Boolean =
-        context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == ID_DEADLINES }
-
-    // ---- open notes count on the icon ----
-
-    fun showCount(context: Context, openCount: Int) {
-        if (openCount == 0 || !canPost(context)) {
-            cancelCount(context)
-            return
-        }
-        ensureChannels(context)
-        val notification = NotificationCompat.Builder(context, CHANNEL_COUNT)
-            .setSmallIcon(R.drawable.ic_stat_notes)
-            .setContentTitle(if (openCount == 1) "1 open note" else "$openCount open notes")
-            .setNumber(openCount)                              // the number some launchers show on the icon
-            .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-            .setSilent(true)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setOngoing(false)
-            .setContentIntent(openApp(context, LaunchRequest(filter = NoteFilter.OPEN), 10))
-            .build()
-        NotificationManagerCompat.from(context).notify(ID_COUNT, notification)
+    fun cancelDeadlines(context: Context) {
+        val manager = NotificationManagerCompat.from(context)
+        shownReminders(context).forEach { manager.cancel(it.id) }
     }
 
-    fun cancelCount(context: Context) = NotificationManagerCompat.from(context).cancel(ID_COUNT)
+    fun deadlinesShown(context: Context): Boolean = shownReminders(context).isNotEmpty()
 }

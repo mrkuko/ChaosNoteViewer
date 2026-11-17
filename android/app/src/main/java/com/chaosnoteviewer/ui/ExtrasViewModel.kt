@@ -14,27 +14,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-data class ExtrasState(val reminders: Boolean = false, val countBadge: Boolean = false, val loaded: Boolean = false)
+data class ExtrasState(val reminders: Boolean = false, val loaded: Boolean = false)
 
-// The switches for the deadline reminder and the open notes count on the icon (Settings).
+// The switch for the deadline reminders (Settings).
 class ExtrasViewModel(private val app: ChaosApp) : ViewModel() {
     private val prefs = app.extrasPrefs
     private val _state = MutableStateFlow(ExtrasState())
     val state: StateFlow<ExtrasState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { _state.value = ExtrasState(prefs.reminders(), prefs.countBadge(), loaded = true) }
+        viewModelScope.launch { _state.value = ExtrasState(prefs.reminders(), loaded = true) }
     }
 
     fun setReminders(on: Boolean) = viewModelScope.launch {
         prefs.setReminders(on)
         _state.value = _state.value.copy(reminders = on)
-        Extras.applySwitches(app, prefs, app.notes.alive.first())
-    }
-
-    fun setCountBadge(on: Boolean) = viewModelScope.launch {
-        prefs.setCountBadge(on)
-        _state.value = _state.value.copy(countBadge = on)
         Extras.applySwitches(app, prefs, app.notes.alive.first())
     }
 

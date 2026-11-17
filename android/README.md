@@ -13,7 +13,7 @@ Kotlin, Jetpack Compose, Room, WorkManager, Glance (home screen widget), Firebas
   first device and typed in on the others; it is never stored in the cloud.
 - Sync soon after a change, every 30 s while the app is open, about every 15 minutes while it is closed, and as soon as the
   network is back after changes made offline.
-- Home screen widget, a daily reminder about notes due today or overdue, the number of open notes on the app icon.
+- Home screen widget and a morning reminder: one notification for every note that is due today or overdue, with a Done button.
 
 ## Build and run
 

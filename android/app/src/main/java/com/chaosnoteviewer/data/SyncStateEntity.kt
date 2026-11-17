@@ -30,9 +30,9 @@ object StateKeys {
     // the user saw it and confirmed they saved it; same names as on desktop, other content
     const val ENC_KEY = "enc_key"
     const val KEY_CONFIRMED = "key_confirmed"
-    // per-device switches (not synced): daily reminder about notes due today or overdue, open-notes count on the icon
+    // per-device switch (not synced): the morning reminders about notes due today or overdue
+    // (an old "count_badge" row of the removed open-notes count may still be in the table, nothing reads it)
     const val REMINDERS = "reminders"
-    const val COUNT_BADGE = "count_badge"
     // sync while the app is closed (WorkManager); on unless "0"
     const val BG_SYNC = "bg_sync"
 }

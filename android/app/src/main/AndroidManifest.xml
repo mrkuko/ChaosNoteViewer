@@ -31,6 +31,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/notes_widget_info" />
         </receiver>
+        <!-- the Done button of a reminder notification; only this app's own PendingIntent reaches it -->
+        <receiver
+            android:name=".extras.NoteActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

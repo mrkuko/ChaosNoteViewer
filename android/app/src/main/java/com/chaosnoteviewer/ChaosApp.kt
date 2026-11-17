@@ -42,7 +42,9 @@ class ChaosApp : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
-        // the widget, the count on the icon and a showing reminder follow the notes (a burst of changes = one update)
+        // the permanent "N open notes" notification of older versions is gone
+        com.chaosnoteviewer.extras.Notifications.removeLegacy(this)
+        // the widget and the showing reminders follow the notes (a burst of changes = one update)
         appScope.launch {
             notes.alive.debounce(400).collect { runCatching { Extras.refresh(this@ChaosApp, extrasPrefs, it) } }
         }
