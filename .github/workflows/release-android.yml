@@ -1,0 +1,102 @@
+name: Release Android
+
+# Push a tag like android-v0.1.0 (on the android branch) to build the signed APK and AAB and attach them to a GitHub
+# release.
+#   android-vX.Y.0   full release, created as a DRAFT: review the notes, then publish it
+#   android-vX.Y.Z   (Z > 0) nightly build: published at once as a pre-release
+#
+# Secrets (Settings > Secrets and variables > Actions), see android/README.md:
+#   ANDROID_KEYSTORE           the release keystore, base64
+#   ANDROID_KEYSTORE_PASSWORD  its password (ASCII only)
+#   GOOGLE_SERVICES_JSON       android/app/google-services.json from the Firebase console, base64
+on:
+  push:
+    tags: ['android-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that the tag is on the android branch
+        run: |
+          if ! git branch -r --contains "$GITHUB_SHA" | grep -q 'origin/android$'; then
+            echo "::error::$GITHUB_REF_NAME is not on the android branch, nothing was published."
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          ver=${GITHUB_REF_NAME#android-v}
+          if ! echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The tag must look like android-v1.2.3, not $GITHUB_REF_NAME."
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          if [ "${ver##*.}" = 0 ]; then echo "kind=full" >> "$GITHUB_OUTPUT"; else echo "kind=nightly" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Firebase configuration and signing key from secrets
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          for name in GOOGLE_SERVICES_JSON ANDROID_KEYSTORE; do
+            if [ -z "${!name}" ]; then echo "::error::The secret $name is missing."; exit 1; fi
+          done
+          echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --console=plain
+
+      - name: Build the signed APK and AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: ./gradlew assembleRelease bundleRelease -PversionName=${{ steps.version.outputs.version }} --console=plain
+
+      - name: Check the signature and collect the files
+        run: |
+          ver=${{ steps.version.outputs.version }}
+          out=android/app/build/outputs
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$out/apk/release/app-release.apk"
+          mkdir dist
+          cp "$out/apk/release/app-release.apk" "dist/ChaosNoteViewer-$ver.apk"
+          cp "$out/bundle/release/app-release.aab" "dist/ChaosNoteViewer-$ver.aab"
+          (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+          cp "$out/mapping/release/mapping.txt" mapping.txt
+
+      # turns a crash report of this release back into readable names; not part of the public release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mapping-${{ steps.version.outputs.version }}
+          path: mapping.txt
+
+      - name: Release notes
+        run: sh .github/scripts/release-notes-android.sh "$GITHUB_REF_NAME" > notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.version.outputs.kind }}" = full ]; then flag=--draft; else flag=--prerelease; fi
+          gh release create "$GITHUB_REF_NAME" dist/* $flag \
+            --title "Chaos Note Viewer for Android ${{ steps.version.outputs.version }}" \
+            --notes-file notes.md

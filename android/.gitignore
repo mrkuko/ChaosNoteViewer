@@ -8,3 +8,4 @@ google-services.json
 .idea/
 *.iml
 captures/
+keystore.properties

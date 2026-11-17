@@ -13,6 +13,19 @@ plugins {
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
+// Release signing: keystore.properties (not committed, see keystore.properties.example) or, in CI, environment variables.
+// Without either the release build is simply left unsigned.
+val keystoreProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(property: String, env: String): String? = keystoreProps.getProperty(property) ?: System.getenv(env)
+
+// Version: -PversionName=1.2.3 (the release workflow passes the tag's version). The code is major*10000 + minor*100 + patch,
+// so every later version is higher, as Android requires for updates.
+val appVersionName = (findProperty("versionName") as String?) ?: "0.1.0"
+val appVersionCode = (findProperty("versionCode") as String?)?.toInt()
+    ?: appVersionName.split(".").map { it.toInt() }.let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
+
 if (file("google-services.json").exists())
     pluginManager.apply("com.google.gms.google-services")
 
@@ -25,10 +38,20 @@ android {
         applicationId = "com.chaosnoteviewer"
         minSdk = 28        // Android 9: the platform has ChaCha20-Poly1305 from here on (crypto/NoteCrypto.kt)
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         buildConfigField("boolean", "FIREBASE_EMULATOR", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            signingValue("storeFile", "ANDROID_KEYSTORE_FILE")?.let { storeFile = rootProject.file(it) }
+            // one password for the keystore and the key (keytool's default PKCS12 format)
+            storePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+            keyPassword = storePassword
+            keyAlias = "chaosnoteviewer"
+        }
     }
 
     buildTypes {
@@ -37,7 +60,10 @@ android {
             buildConfigField("boolean", "FIREBASE_EMULATOR", emulator.toString())
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // signed when a keystore is configured, otherwise left unsigned (app-release-unsigned.apk)
+            if (signingConfigs.getByName("release").storeFile != null) signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
