@@ -178,6 +178,15 @@ PlasmoidItem {
                                 : root.calendarOpen ? i18n("Calendar")
                                 : [i18n("Open notes"), i18n("Completed"), i18n("All notes"), i18n("Important")][ctl.filter]
                         }
+                        // on: starred notes come first, in front of the chosen order
+                        NavButton {
+                            visible: !root.settingsOpen && !root.calendarOpen
+                            iconName: ctl.starredFirst ? "star-filled" : "star"
+                            iconSize: Kirigami.Units.iconSizes.smallMedium
+                            tip: ctl.starredFirst ? i18n("Starred notes first: on") : i18n("Starred notes first: off")
+                            checked: ctl.starredFirst
+                            onClicked: ctl.setStarredFirst(!ctl.starredFirst)
+                        }
                         NavButton {
                             id: sortButton
                             visible: !root.settingsOpen && !root.calendarOpen
@@ -457,16 +466,31 @@ PlasmoidItem {
                                             Layout.fillWidth: true
                                             spacing: 2
 
-                                            PlasmaComponents3.Label {
+                                            RowLayout {
                                                 Layout.fillWidth: true
-                                                text: root.linkify(model.title)
-                                                textFormat: Text.StyledText
-                                                linkColor: Kirigami.Theme.linkColor
-                                                onLinkActivated: link => Qt.openUrlExternally(link)
-                                                HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                                                font.bold: true
-                                                font.strikeout: model.completed
-                                                elide: Text.ElideRight
+                                                spacing: Kirigami.Units.smallSpacing
+
+                                                // a star in front of the title of a starred note
+                                                Image {
+                                                    visible: model.starred
+                                                    source: Qt.resolvedUrl("icons/star-filled.png")
+                                                    sourceSize: Qt.size(Kirigami.Units.iconSizes.small * 3, Kirigami.Units.iconSizes.small * 3)
+                                                    smooth: true
+                                                    mipmap: true
+                                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small * 1.1
+                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small * 1.1
+                                                }
+                                                PlasmaComponents3.Label {
+                                                    Layout.fillWidth: true
+                                                    text: root.linkify(model.title)
+                                                    textFormat: Text.StyledText
+                                                    linkColor: Kirigami.Theme.linkColor
+                                                    onLinkActivated: link => Qt.openUrlExternally(link)
+                                                    HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                                                    font.bold: true
+                                                    font.strikeout: model.completed
+                                                    elide: Text.ElideRight
+                                                }
                                             }
                                             PlasmaComponents3.Label {
                                                 Layout.fillWidth: true
@@ -516,6 +540,18 @@ PlasmoidItem {
                                             opacity: hover.hovered ? 1 : 0
                                             enabled: hover.hovered
                                             onClicked: ctl.reuploadNote(model.noteId)
+                                        }
+
+                                        // shown only while the pointer is on the note; a starred note keeps its star in the title
+                                        NavButton {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            iconName: model.starred ? "star-filled" : "star"
+                                            iconSize: Kirigami.Units.iconSizes.smallMedium
+                                            wide: false
+                                            tip: model.starred ? i18n("Remove the star") : i18n("Mark as important (star)")
+                                            opacity: hover.hovered ? 1 : 0
+                                            enabled: hover.hovered
+                                            onClicked: ctl.setStarred(model.noteId, !model.starred)
                                         }
 
                                         NavButton {
@@ -583,7 +619,7 @@ PlasmoidItem {
 
                                     DragHandler {
                                         id: drag
-                                        enabled: !ctl.sorted
+                                        enabled: !ctl.dragLocked
                                         target: card
                                         xAxis.enabled: false
                                         // may overhang the first/last card by half a row, so the ends can be reached
@@ -1230,6 +1266,13 @@ PlasmoidItem {
                         level: 1
                         font.weight: 900
                         text: i18n("Note")
+                    }
+                    NavButton {
+                        iconName: detailOverlay.note && detailOverlay.note.starred ? "star-filled" : "star"
+                        iconSize: Kirigami.Units.iconSizes.smallMedium
+                        wide: false
+                        tip: detailOverlay.note && detailOverlay.note.starred ? i18n("Remove the star") : i18n("Mark as important (star)")
+                        onClicked: ctl.setStarred(root.detailId, !detailOverlay.note.starred)
                     }
                     NavButton {
                         iconName: "check-double"

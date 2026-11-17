@@ -86,6 +86,17 @@ Item {
     // true while the order of another view is being loaded, so loading it doesn't save it again
     property bool loadingSort: false
 
+    // Starred notes first, in front of whatever order is chosen (in the important view's upcoming-then-overdue
+    // order: first within each of its two parts). Dragging is off while it is on, like in any forced order.
+    // Kept on this device (sync_state starred_first), the stars themselves are synced with the notes.
+    property bool starredFirst: false
+    readonly property bool dragLocked: sorted || starredFirst
+    function setStarredFirst(on) {
+        starredFirst = on
+        NoteStore.setState("starred_first", on ? "1" : "0")
+        refresh()
+    }
+
     // where the order of the current view is kept
     function sortKey(name) {
         return filter === 3 ? "important_" + name : name
@@ -160,13 +171,18 @@ Item {
         const dir = sortDesc ? -1 : 1
         let d = 0
         if (sortField === upcomingSort) {
-            // upcoming first, closest deadline first; then the overdue ones, the most recently missed first
+            // upcoming first, closest deadline first; then the overdue ones, the most recently missed first.
+            // Starred notes lead inside each of the two parts, never across them.
             const today = startOfToday()
             const aLate = a.dueDate < today, bLate = b.dueDate < today
             if (aLate !== bLate)
                 d = aLate ? 1 : -1
+            else if (starredFirst && a.starred !== b.starred)
+                d = a.starred ? -1 : 1
             else
                 d = aLate ? b.dueDate - a.dueDate : a.dueDate - b.dueDate
+        } else if (starredFirst && a.starred !== b.starred) {
+            d = a.starred ? -1 : 1
         } else if (sortField === 1) {
             d = a.title.localeCompare(b.title) * dir
         } else if (sortField === 2) {
@@ -195,12 +211,12 @@ Item {
             const n = notes.get(i)
             if (matches(n))
                 rows.push({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed,
-                            dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
+                            starred: n.starred, dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
                             missing: missingIds[n.noteId] === true,
                             group: split && n.dueDate > 0 && n.dueDate < today ? "overdue" : "" })
         }
         // not `sorted`: this also runs from the change handler of sortField, before that flag has updated
-        if (sortField !== 0)
+        if (sortField !== 0 || starredFirst)
             rows.sort(compare)
         shown.clear()
         for (const r of rows)
@@ -259,6 +275,15 @@ Item {
         refresh()
         scheduleSync()
         return n
+    }
+
+    function setStarred(noteId, starred) {
+        NoteStore.setStarred(noteId, starred)
+        const i = indexOfNote(noteId)
+        if (i >= 0)
+            notes.setProperty(i, "starred", starred)
+        refresh()
+        scheduleSync()
     }
 
     function setCompleted(noteId, completed) {
@@ -730,6 +755,7 @@ Item {
             configured = true
         }
         setupSeen = configured || NoteStore.getState("setup_seen") === "1"
+        starredFirst = NoteStore.getState("starred_first") === "1"
         loadSort()
         reload()
         restoreSession()

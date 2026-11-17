@@ -49,6 +49,13 @@ Rectangle {
                 text: qsTr("Note")
             }
             NavButton {
+                iconName: page.note && page.note.starred ? "star-filled" : "star"
+                iconSize: Theme.iconMedium
+                wide: false
+                tip: page.note && page.note.starred ? qsTr("Remove the star") : qsTr("Mark as important (star)")
+                onClicked: ctl.setStarred(app.detailId, !page.note.starred)
+            }
+            NavButton {
                 iconName: "check-double"
                 iconSize: Theme.iconMedium
                 wide: false

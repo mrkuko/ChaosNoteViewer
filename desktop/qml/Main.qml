@@ -152,6 +152,15 @@ ApplicationWindow {
                             : root.calendarOpen ? qsTr("Calendar")
                             : [qsTr("Open notes"), qsTr("Completed"), qsTr("All notes"), qsTr("Important")][ctl.filter]
                     }
+                    // on: starred notes come first, in front of the chosen order
+                    NavButton {
+                        visible: !root.settingsOpen && !root.calendarOpen
+                        iconName: ctl.starredFirst ? "star-filled" : "star"
+                        iconSize: Theme.iconMedium
+                        tip: ctl.starredFirst ? qsTr("Starred notes first: on") : qsTr("Starred notes first: off")
+                        checked: ctl.starredFirst
+                        onClicked: ctl.setStarredFirst(!ctl.starredFirst)
+                    }
                     NavButton {
                         id: sortButton
                         visible: !root.settingsOpen && !root.calendarOpen

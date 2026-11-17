@@ -71,6 +71,7 @@ function _encode(key, row) {
         title: row.title,
         description: row.description,
         completed: row.completed === 1,
+        starred: row.starred === 1,
         position: row.position,
         dueDate: row.due_date,
         createdAt: row.created_at,
@@ -85,8 +86,10 @@ function _parse(json) {
         if (typeof n.title !== "string" || typeof n.description !== "string" || typeof n.completed !== "boolean"
                 || typeof n.position !== "number" || !isFinite(n.position)
                 || typeof n.createdAt !== "number" || typeof n.updatedAt !== "number"
-                || !(n.dueDate === null || (typeof n.dueDate === "number" && isFinite(n.dueDate))))
+                || !(n.dueDate === null || (typeof n.dueDate === "number" && isFinite(n.dueDate)))
+                || !(n.starred === undefined || typeof n.starred === "boolean"))      // missing: an older client
             return null
+        n.starred = n.starred === true
         return n
     } catch (e) {
         return null

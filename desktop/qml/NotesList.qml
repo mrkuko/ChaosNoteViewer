@@ -137,16 +137,31 @@ ListView {
                     Layout.fillWidth: true
                     spacing: 2
 
-                    Label {
+                    RowLayout {
                         Layout.fillWidth: true
-                        text: Theme.linkify(model.title)
-                        textFormat: Text.StyledText
-                        linkColor: Theme.link
-                        onLinkActivated: link => Qt.openUrlExternally(link)
-                        HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                        font.bold: true
-                        font.strikeout: model.completed
-                        elide: Text.ElideRight
+                        spacing: Theme.small
+
+                        // a star in front of the title of a starred note
+                        Image {
+                            visible: model.starred
+                            source: Qt.resolvedUrl("../icons/star-filled.png")
+                            sourceSize: Qt.size(Theme.iconSmall * 3, Theme.iconSmall * 3)
+                            smooth: true
+                            mipmap: true
+                            Layout.preferredWidth: Theme.iconSmall * 1.1
+                            Layout.preferredHeight: Theme.iconSmall * 1.1
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: Theme.linkify(model.title)
+                            textFormat: Text.StyledText
+                            linkColor: Theme.link
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                            font.bold: true
+                            font.strikeout: model.completed
+                            elide: Text.ElideRight
+                        }
                     }
                     Label {
                         Layout.fillWidth: true
@@ -196,6 +211,17 @@ ListView {
                     opacity: hover.hovered ? 1 : 0
                     enabled: hover.hovered
                     onClicked: ctl.reuploadNote(model.noteId)
+                }
+                // shown only while the pointer is on the note; a starred note keeps its star in the title
+                NavButton {
+                    Layout.alignment: Qt.AlignVCenter
+                    iconName: model.starred ? "star-filled" : "star"
+                    iconSize: Theme.iconMedium
+                    wide: false
+                    tip: model.starred ? qsTr("Remove the star") : qsTr("Mark as important (star)")
+                    opacity: hover.hovered ? 1 : 0
+                    enabled: hover.hovered
+                    onClicked: ctl.setStarred(model.noteId, !model.starred)
                 }
                 NavButton {
                     Layout.alignment: Qt.AlignVCenter
@@ -257,7 +283,7 @@ ListView {
 
             DragHandler {
                 id: drag
-                enabled: !ctl.sorted
+                enabled: !ctl.dragLocked
                 target: card
                 xAxis.enabled: false
                 // may overhang the first/last card by half a row, so the ends can be reached

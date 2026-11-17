@@ -63,6 +63,7 @@ function _row(r) {
         title: r.title,
         description: r.description,
         completed: r.completed === 1,
+        starred: r.starred === 1,
         position: r.position,
         dueDate: r.due_date === null ? 0 : r.due_date,  // 0 = no deadline
         createdAt: r.created_at
@@ -91,7 +92,7 @@ function add(title, description, dueDate) {
         var pos = tx.executeSql("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM notes WHERE deleted_at IS NULL").rows.item(0).p
         tx.executeSql("INSERT INTO notes (id, title, description, completed, position, due_date, created_at, updated_at, dirty) "
             + "VALUES (?, COALESCE(?, ''), COALESCE(?, ''), 0, ?, ?, ?, ?, 1)", [id, title, description, pos, dueDate > 0 ? dueDate : null, now, now])
-        note = { noteId: id, title: title, description: description, completed: false, position: pos, dueDate: dueDate, createdAt: now }
+        note = { noteId: id, title: title, description: description, completed: false, starred: false, position: pos, dueDate: dueDate, createdAt: now }
     })
     return note
 }
@@ -111,6 +112,13 @@ function update(noteId, title, description, dueDate) {
     db().transaction(function (tx) {
         tx.executeSql("UPDATE notes SET title = COALESCE(?, ''), description = COALESCE(?, ''), due_date = ?, updated_at = ?, dirty = 1 WHERE id = ?",
             [title, description, dueDate > 0 ? dueDate : null, Date.now(), noteId])
+    })
+}
+
+function setStarred(noteId, starred) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET starred = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            [starred ? 1 : 0, Date.now(), noteId])
     })
 }
 
@@ -237,9 +245,9 @@ function applyRemote(items, uid) {
             if (n) {
                 var rs = tx.executeSql("SELECT updated_at, dirty FROM notes WHERE id = ?", [it.id])
                 if (rs.rows.length === 0) {
-                    tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, position, due_date, "
-                        + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, COALESCE(?, ''), COALESCE(?, ''), ?, ?, ?, ?, ?, ?, 0, ?)",
-                        [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
+                    tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, starred, position, due_date, "
+                        + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, COALESCE(?, ''), COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                        [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, n.position, n.dueDate,
                          n.createdAt, n.updatedAt, null, it.tsMs])
                     ++changed
                 } else if (rs.rows.item(0).updated_at >= n.updatedAt) {
@@ -247,9 +255,9 @@ function applyRemote(items, uid) {
                     if (rs.rows.item(0).dirty === 0)
                         tx.executeSql("UPDATE notes SET remote_updated_at = ? WHERE id = ?", [it.tsMs, it.id])
                 } else {
-                    tx.executeSql("UPDATE notes SET title = COALESCE(?, ''), description = COALESCE(?, ''), completed = ?, position = ?, due_date = ?, "
+                    tx.executeSql("UPDATE notes SET title = COALESCE(?, ''), description = COALESCE(?, ''), completed = ?, starred = ?, position = ?, due_date = ?, "
                         + "updated_at = ?, deleted_at = ?, dirty = 0, remote_updated_at = ? WHERE id = ?",
-                        [n.title, n.description, n.completed ? 1 : 0, n.position, n.dueDate,
+                        [n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, n.position, n.dueDate,
                          n.updatedAt, null, it.tsMs, it.id])
                     ++changed
                 }
