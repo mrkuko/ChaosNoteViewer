@@ -75,6 +75,7 @@ qt_add_qml_module(chaosnoteviewer
         qml/EditPage.qml
         qml/NavButton.qml
         qml/NotesList.qml
+        qml/SelectableText.qml
         qml/SettingsPage.qml
         qml/TextButton.qml
         qml/Theme.qml

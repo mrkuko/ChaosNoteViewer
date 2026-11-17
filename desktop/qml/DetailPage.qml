@@ -84,18 +84,14 @@ Rectangle {
                 width: scroll.availableWidth
                 spacing: Theme.large
 
-                Label {
+                SelectableText {
                     Layout.fillWidth: true
                     Layout.margins: Theme.large
                     Layout.bottomMargin: 0
                     font.pointSize: 13
                     font.bold: true
-                    wrapMode: Text.Wrap
-                    textFormat: Text.StyledText
-                    linkColor: Theme.link
-                    onLinkActivated: link => Qt.openUrlExternally(link)
                     font.strikeout: page.note ? page.note.completed : false
-                    text: page.note ? Theme.linkify(page.note.title) : ""
+                    content: page.note ? Theme.linkify(page.note.title) : ""
                 }
 
                 RowLayout {
@@ -115,23 +111,21 @@ Rectangle {
                         Layout.preferredWidth: Theme.iconMedium
                         Layout.preferredHeight: Theme.iconMedium
                     }
-                    Label {
+                    SelectableText {
                         Layout.fillWidth: true
-                        wrapMode: Text.Wrap
                         color: parent.overdue ? Theme.negative : Theme.text
-                        text: page.note && page.note.dueDate > 0
+                        content: page.note && page.note.dueDate > 0
                             ? qsTr("Deadline: %1").arg(new Date(page.note.dueDate).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                             : ""
                     }
                 }
-                Label {
+                SelectableText {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.large
                     Layout.rightMargin: Theme.large
                     font.pointSize: Theme.smallFont
                     opacity: 0.7
-                    wrapMode: Text.Wrap
-                    text: page.note
+                    content: page.note
                         ? (page.note.completed ? qsTr("Completed") + " · " : "")
                           + qsTr("Created %1").arg(new Date(page.note.createdAt).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                         : ""
@@ -140,18 +134,13 @@ Rectangle {
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
 
                 // the whole description, line breaks kept
-                Label {
+                SelectableText {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.large
                     Layout.rightMargin: Theme.large
                     Layout.bottomMargin: Theme.large
-                    wrapMode: Text.Wrap
-                    textFormat: Text.StyledText
-                    linkColor: Theme.link
-                    onLinkActivated: link => Qt.openUrlExternally(link)
-                    HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
                     visible: text !== ""
-                    text: page.note ? Theme.linkify(page.note.description).replace(/\n/g, "<br>") : ""
+                    content: page.note ? Theme.linkify(page.note.description).replace(/\n/g, "<br>") : ""
                 }
                 // room for more content in the future
             }

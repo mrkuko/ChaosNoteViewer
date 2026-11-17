@@ -1195,17 +1195,14 @@ PlasmoidItem {
                         width: detailScroll.availableWidth
                         spacing: Kirigami.Units.largeSpacing
 
-                        Kirigami.Heading {
+                        SelectableText {
                             Layout.fillWidth: true
                             Layout.margins: Kirigami.Units.largeSpacing
                             Layout.bottomMargin: 0
-                            level: 2
-                            wrapMode: Text.Wrap
-                            textFormat: Text.StyledText
-                            linkColor: Kirigami.Theme.linkColor
-                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.35
+                            font.bold: true
                             font.strikeout: detailOverlay.note ? detailOverlay.note.completed : false
-                            text: detailOverlay.note ? root.linkify(detailOverlay.note.title) : ""
+                            content: detailOverlay.note ? root.linkify(detailOverlay.note.title) : ""
                         }
 
                         // status, deadline and creation date
@@ -1226,23 +1223,21 @@ PlasmoidItem {
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                             }
-                            PlasmaComponents3.Label {
+                            SelectableText {
                                 Layout.fillWidth: true
-                                wrapMode: Text.Wrap
                                 color: parent.overdue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-                                text: detailOverlay.note && detailOverlay.note.dueDate > 0
+                                content: detailOverlay.note && detailOverlay.note.dueDate > 0
                                     ? i18n("Deadline: %1", new Date(detailOverlay.note.dueDate).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                                     : ""
                             }
                         }
-                        PlasmaComponents3.Label {
+                        SelectableText {
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.largeSpacing
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             opacity: 0.7
-                            wrapMode: Text.Wrap
-                            text: detailOverlay.note
+                            content: detailOverlay.note
                                 ? (detailOverlay.note.completed ? i18n("Completed") + " · " : "")
                                   + i18n("Created %1", new Date(detailOverlay.note.createdAt).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                                 : ""
@@ -1251,18 +1246,13 @@ PlasmoidItem {
                         Kirigami.Separator { Layout.fillWidth: true }
 
                         // the whole description, line breaks kept
-                        PlasmaComponents3.Label {
+                        SelectableText {
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.largeSpacing
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             Layout.bottomMargin: Kirigami.Units.largeSpacing
-                            wrapMode: Text.Wrap
-                            textFormat: Text.StyledText
-                            linkColor: Kirigami.Theme.linkColor
-                            onLinkActivated: link => Qt.openUrlExternally(link)
-                            HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                            visible: text !== ""
-                            text: detailOverlay.note ? root.linkify(detailOverlay.note.description).replace(/\n/g, "<br>") : ""
+                            visible: content !== ""
+                            content: detailOverlay.note ? root.linkify(detailOverlay.note.description).replace(/\n/g, "<br>") : ""
                         }
                         // room for more content in the future
                     }
