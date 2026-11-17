@@ -52,6 +52,9 @@ class NotesRepository(
     suspend fun setCompleted(id: String, completed: Boolean) =
         notes.setCompleted(id, completed, now())
 
+    suspend fun setStarred(id: String, starred: Boolean) =
+        notes.setStarred(id, starred, now())
+
     // A note that was never on the server is removed, a synced one is hidden and queued for the sync.
     suspend fun delete(id: String) = db.withTransaction {
         notes.deleteUnsynced(id)
@@ -86,6 +89,18 @@ class NotesRepository(
 
     // ---- sync ----
 
+    // Before this app knew stars it read notes without them and moved its pull cursor past those notes, so the
+    // stars set on other devices were lost here for good. Once, the cursor goes back to the start: the next sync
+    // reads every note again and takes the stars over (applyRemote). Does nothing on a new install (no cursor).
+    suspend fun repairStarsOnce() {
+        if (state.get(StateKeys.STARS_PULLED) == "1") return
+        db.withTransaction {
+            state.clear(StateKeys.CURSOR_TS)
+            state.clear(StateKeys.CURSOR_ID)
+            state.set(SyncStateEntity(StateKeys.STARS_PULLED, "1"))
+        }
+    }
+
     override suspend fun dirtyRows(): List<NoteEntity> = notes.dirtyRows()
     override suspend fun markPushed(id: String, updatedAt: Long, remoteMs: Long) = notes.markPushed(id, updatedAt, remoteMs)
     override suspend fun purge(id: String, updatedAt: Long) = notes.purge(id, updatedAt)
@@ -102,7 +117,7 @@ class NotesRepository(
                     notes.insert(
                         NoteEntity(
                             id = item.id, authorId = uid, title = n.title, description = n.description,
-                            completed = n.completed, position = n.position, dueDate = n.dueDate,
+                            completed = n.completed, starred = n.starred, position = n.position, dueDate = n.dueDate,
                             createdAt = n.createdAt, updatedAt = n.updatedAt, deletedAt = null,
                             dirty = false, remoteUpdatedAt = item.tsMs,
                         ),
@@ -110,10 +125,18 @@ class NotesRepository(
                     changed++
                 }
                 // the local version is newer or the same (e.g. our own push coming back)
-                local.updatedAt >= n.updatedAt -> if (!local.dirty) notes.setRemoteUpdatedAt(item.id, item.tsMs)
+                local.updatedAt >= n.updatedAt -> if (!local.dirty) {
+                    notes.setRemoteUpdatedAt(item.id, item.tsMs)
+                    // The same version, but with a star this phone did not know about when it first read the note
+                    // (before the update that brought stars): take it over. Nothing else differs, so the time stays.
+                    if (local.updatedAt == n.updatedAt && local.starred != n.starred) {
+                        notes.setStarredFromRemote(item.id, n.starred)
+                        changed++
+                    }
+                }
                 else -> {
                     notes.overwriteFromRemote(
-                        item.id, n.title, n.description, n.completed, n.position, n.dueDate, n.updatedAt, item.tsMs,
+                        item.id, n.title, n.description, n.completed, n.starred, n.position, n.dueDate, n.updatedAt, item.tsMs,
                     )
                     changed++
                 }

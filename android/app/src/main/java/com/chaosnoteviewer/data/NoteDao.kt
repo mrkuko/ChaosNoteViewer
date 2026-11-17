@@ -33,6 +33,9 @@ interface NoteDao {
     @Query("UPDATE notes SET completed = :completed, updated_at = :now, dirty = 1 WHERE id = :id")
     suspend fun setCompleted(id: String, completed: Boolean, now: Long)
 
+    @Query("UPDATE notes SET starred = :starred, updated_at = :now, dirty = 1 WHERE id = :id")
+    suspend fun setStarred(id: String, starred: Boolean, now: Long)
+
     @Query("UPDATE notes SET position = :position, updated_at = :now, dirty = 1 WHERE id = :id")
     suspend fun setPosition(id: String, position: Double, now: Long)
 
@@ -81,11 +84,11 @@ interface NoteDao {
     suspend fun setRemoteUpdatedAt(id: String, remoteMs: Long)
 
     @Query(
-        "UPDATE notes SET title = :title, description = :description, completed = :completed, position = :position, " +
-            "due_date = :dueDate, updated_at = :updatedAt, deleted_at = NULL, dirty = 0, remote_updated_at = :remoteMs WHERE id = :id",
+        "UPDATE notes SET title = :title, description = :description, completed = :completed, starred = :starred, " +
+            "position = :position, due_date = :dueDate, updated_at = :updatedAt, deleted_at = NULL, dirty = 0, remote_updated_at = :remoteMs WHERE id = :id",
     )
     suspend fun overwriteFromRemote(
-        id: String, title: String, description: String, completed: Boolean, position: Double,
+        id: String, title: String, description: String, completed: Boolean, starred: Boolean, position: Double,
         dueDate: Long?, updatedAt: Long, remoteMs: Long,
     )
 
@@ -94,6 +97,9 @@ interface NoteDao {
     suspend fun syncedIds(): List<String>
 
     // a note that no longer exists on the server: to the sync it is a brand new note
+    @Query("UPDATE notes SET starred = :starred WHERE id = :id")
+    suspend fun setStarredFromRemote(id: String, starred: Boolean)
+
     @Query("UPDATE notes SET dirty = 1, remote_updated_at = NULL WHERE id = :id AND deleted_at IS NULL")
     suspend fun reupload(id: String)
 

@@ -138,6 +138,7 @@ class NotesViewModel(
         ghostTimers.clear()
         recent.value = emptyMap()
     }
+    fun setStarred(id: String, starred: Boolean) = viewModelScope.launch { repo.setStarred(id, starred) }
     fun delete(id: String) = viewModelScope.launch { repo.delete(id) }
     fun deleteCompleted() = viewModelScope.launch { repo.deleteCompleted() }
 

@@ -33,6 +33,8 @@ object StateKeys {
     // per-device switch (not synced): the morning reminders about notes due today or overdue
     // (an old "count_badge" row of the removed open-notes count may still be in the table, nothing reads it)
     const val REMINDERS = "reminders"
+    // set once this device re-read the notes after it learned about stars (NotesRepository.repairStarsOnce)
+    const val STARS_PULLED = "stars_pulled"
     // sync while the app is closed (WorkManager); on unless "0"
     const val BG_SYNC = "bg_sync"
 }

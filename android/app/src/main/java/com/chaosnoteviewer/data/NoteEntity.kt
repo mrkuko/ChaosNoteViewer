@@ -5,7 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// One row of `notes`, exactly as core/storage/migrations/001_notes.sql + 002_sync.sql define it
+// One row of `notes`, exactly as core/storage/migrations/001_notes.sql, 002_sync.sql and 003_starred.sql define it
 // (NoteSchemaTest builds a database from those files and opens it with Room). Room can't express the
 // CHECK constraints and the partial index of the SQL files; the data written here satisfies them anyway.
 // Times are ms since the Unix epoch (UTC).
@@ -24,6 +24,8 @@ data class NoteEntity(
     val title: String,
     @ColumnInfo(defaultValue = "''") val description: String = "",
     @ColumnInfo(defaultValue = "0") val completed: Boolean = false,
+    // marked as important with a star; part of the synced note content (003_starred.sql)
+    @ColumnInfo(defaultValue = "0") val starred: Boolean = false,
     // queue order, lower = higher priority; a double so a note fits between two neighbours
     val position: Double,
     // local midnight of the deadline day, null = no deadline

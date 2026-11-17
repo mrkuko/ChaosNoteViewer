@@ -42,6 +42,8 @@ class ChaosApp : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
+        // once: read the notes again so the stars set on other devices arrive (they were dropped before this version)
+        appScope.launch { runCatching { notes.repairStarsOnce() } }
         // the permanent "N open notes" notification of older versions is gone
         com.chaosnoteviewer.extras.Notifications.removeLegacy(this)
         // the widget and the showing reminders follow the notes (a burst of changes = one update)

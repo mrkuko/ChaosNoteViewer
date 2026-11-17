@@ -309,6 +309,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
                             startOfToday = state.startOfToday,
                             missing = note.id in state.missing,
                             onOpen = { onOpenNote(note.id) },
+                            onStar = { vm.setStarred(note.id, it) },
                             handle = if (state.sorted) null else {
                                 {
                                     IconButton(
@@ -346,6 +347,7 @@ private fun NoteRow(
     startOfToday: Long,
     missing: Boolean,
     onOpen: () -> Unit,
+    onStar: (Boolean) -> Unit,
     handle: (@Composable () -> Unit)?,
 ) {
     val link = MaterialTheme.colorScheme.primary
@@ -381,7 +383,17 @@ private fun NoteRow(
                 }
             }
         },
-        trailingContent = handle,
+        // Only a starred note shows its star (so the starred ones stand out); a tap on it removes the star. A note is
+        // starred from its detail page. The drag handle (your own order only) is next to it.
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (note.starred)
+                    IconButton(onClick = { onStar(false) }) {
+                        AppIcon("star-filled", "Starred, tap to remove the star", tint = MaterialTheme.colorScheme.primary)
+                    }
+                handle?.invoke()
+            }
+        },
     )
 }
 

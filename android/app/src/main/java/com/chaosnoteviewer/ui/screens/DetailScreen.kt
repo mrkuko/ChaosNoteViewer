@@ -13,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -58,6 +59,16 @@ fun DetailScreen(vm: NotesViewModel, syncVm: SyncViewModel, noteId: String, onBa
                 title = { Text("Note") },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
+                    // the star marks the note as important (synced, shown in front of the title in the list)
+                    val current = note
+                    if (current != null && current !== Unloaded)
+                        IconButton(onClick = { vm.setStarred(noteId, !current.starred) }) {
+                            AppIcon(
+                                if (current.starred) "star-filled" else "star",
+                                if (current.starred) "Remove the star" else "Mark as important (star)",
+                                tint = if (current.starred) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                            )
+                        }
                     IconButton(onClick = onEdit) { AppIcon("pencil", "Edit") }
                     IconButton(onClick = { confirmDelete = true }) { AppIcon("trash", "Delete") }
                 },

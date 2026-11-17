@@ -5,6 +5,8 @@ data class RemoteNote(
     val title: String,
     val description: String,
     val completed: Boolean,
+    // missing in a note written by a client that doesn't know stars: not starred
+    val starred: Boolean,
     val position: Double,
     val dueDate: Long?,
     val createdAt: Long,

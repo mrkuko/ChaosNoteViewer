@@ -104,6 +104,58 @@ class SyncEngineTest {
         assertFalse(got.dirty)
     }
 
+    @Test fun aStarTravelsToTheOtherPhoneAndBack() = runTest {
+        val a = phone(); val b = phone()
+        val n = a.repo.add("important"); a.sync(); b.sync()
+        assertFalse(b.repo.get(n.id)!!.starred)
+
+        a.clock = 5_000L
+        a.repo.setStarred(n.id, true); a.sync(); b.sync()
+        assertTrue(b.repo.get(n.id)!!.starred)
+
+        b.clock = 9_000L
+        b.repo.setStarred(n.id, false); b.sync(); a.sync()
+        assertFalse(a.repo.get(n.id)!!.starred)
+    }
+
+    // an edit of the text on this phone must not lose a star that came from another device
+    @Test fun editingTheTextKeepsTheStar() = runTest {
+        val a = phone(); val b = phone()
+        val n = a.repo.add("title"); a.repo.setStarred(n.id, true); a.sync(); b.sync()
+        b.clock = 5_000L
+        b.repo.update(n.id, "new title", "", null); b.sync(); a.sync()
+        val got = a.repo.get(n.id)!!
+        assertEquals("new title", got.title)
+        assertTrue(got.starred)
+    }
+
+    // a note written before stars existed (no "starred" in the content) arrives as not starred
+    @Test fun aNoteFromAnOlderClientIsNotStarred() = runTest {
+        val json = """{"title":"old","description":"","completed":false,"position":1,"dueDate":null,"createdAt":1,"updatedAt":2}"""
+        cloud.put(uid, "old-note", NoteCrypto.encrypt(key, json, "old-note"))
+        val a = phone(); a.sync()
+        val got = a.repo.get("old-note")!!
+        assertEquals("old", got.title)
+        assertFalse(got.starred)
+    }
+
+    // The phone read the note before it knew stars (the star was dropped) and the cursor moved on; after the update
+    // the pull comes again and the star, on the same version of the note, is taken over.
+    @Test fun aStarOnTheSameVersionIsTakenOverOnTheNextPull() = runTest {
+        val a = phone(); val b = phone()
+        val n = a.repo.add("important"); a.sync(); b.sync()
+        val local = b.repo.get(n.id)!!
+        assertFalse(local.starred)
+        cloud.put(uid, n.id, NoteCrypto.encrypt(key, NoteJson.encode(local.copy(starred = true)), n.id))   // same updatedAt
+        b.repo.setState(StateKeys.CURSOR_TS, ""); b.repo.setState(StateKeys.CURSOR_ID, "")                  // what the migration does
+
+        assertEquals(1, b.sync().pulled)
+        val got = b.repo.get(n.id)!!
+        assertTrue(got.starred)
+        assertEquals("the time of the note stays", local.updatedAt, got.updatedAt)
+        assertFalse(got.dirty)
+    }
+
     @Test fun reorderingTravelsToo() = runTest {
         val a = phone(); val b = phone()
         a.repo.add("a"); a.repo.add("b"); a.repo.add("c"); a.sync(); b.sync()

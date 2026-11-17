@@ -74,6 +74,31 @@ class NotesRepositoryTest {
         assertEquals(3_000L, repo.get(n.id)!!.updatedAt)
     }
 
+    @Test fun aStarIsSetAndRemovedAndQueuedForTheSync() = runTest {
+        val n = repo.add("a")
+        assertFalse(repo.get(n.id)!!.starred)
+        db.notes().markPushed(n.id, repo.get(n.id)!!.updatedAt, 500L)               // clean, like after a sync
+        clock = 4_000L
+        repo.setStarred(n.id, true)
+        val row = repo.get(n.id)!!
+        assertTrue(row.starred)
+        assertEquals(4_000L, row.updatedAt)
+        assertTrue("the star has to go up with the next sync", row.dirty)
+        repo.setStarred(n.id, false)
+        assertFalse(repo.get(n.id)!!.starred)
+    }
+
+    @Test fun theStarRepairResetsThePullCursorOnlyOnce() = runTest {
+        repo.setState(StateKeys.CURSOR_TS, "2026-11-17T22:20:57.775Z"); repo.setState(StateKeys.CURSOR_ID, "abc")
+        repo.repairStarsOnce()
+        assertEquals("", repo.getState(StateKeys.CURSOR_TS))
+        assertEquals("", repo.getState(StateKeys.CURSOR_ID))
+
+        repo.setState(StateKeys.CURSOR_TS, "2026-11-18T08:00:00Z")                  // a later sync moved the cursor
+        repo.repairStarsOnce()
+        assertEquals("the second call leaves it alone", "2026-11-18T08:00:00Z", repo.getState(StateKeys.CURSOR_TS))
+    }
+
     @Test fun deleteOfUnsyncedNoteRemovesTheRow() = runTest {
         val n = repo.add("a")
         repo.delete(n.id)
