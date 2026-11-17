@@ -15,6 +15,10 @@ PlasmoidItem {
     // UI state of this launcher
     property bool settingsOpen: !ctl.setupSeen   // first run opens on the API key setup
     property bool addOpen: false
+    // the calendar of deadlines is shown instead of the notes list
+    property bool calendarOpen: false
+    // deadline a new note starts with (the day chosen in the calendar), 0 = none
+    property double newNoteDue: 0
     // the note being edited in the same page as "New note"; null = not editing
     property var editNote: null
     // number of notes the "delete all completed" confirmation is asking about; 0 = not asking
@@ -122,11 +126,22 @@ PlasmoidItem {
                             iconName: modelData.icon
                             tip: modelData.text
                             // not checkable: a click would break the binding, the binding decides
-                            checked: !root.settingsOpen && ctl.filter === modelData.filter
+                            checked: !root.settingsOpen && !root.calendarOpen && ctl.filter === modelData.filter
                             onClicked: {
                                 root.settingsOpen = false
+                                root.calendarOpen = false
                                 ctl.filter = modelData.filter
                             }
+                        }
+                    }
+
+                    NavButton {
+                        iconName: "calendar"
+                        tip: i18n("Calendar of deadlines")
+                        checked: !root.settingsOpen && root.calendarOpen
+                        onClicked: {
+                            root.settingsOpen = false
+                            root.calendarOpen = true
                         }
                     }
 
@@ -160,11 +175,12 @@ PlasmoidItem {
                             font.weight: 900
                             elide: Text.ElideRight
                             text: root.settingsOpen ? i18n("Settings")
+                                : root.calendarOpen ? i18n("Calendar")
                                 : [i18n("Open notes"), i18n("Completed"), i18n("All notes"), i18n("Important")][ctl.filter]
                         }
                         NavButton {
                             id: sortButton
-                            visible: !root.settingsOpen
+                            visible: !root.settingsOpen && !root.calendarOpen
                             iconName: "filter"
                             tip: ctl.sorted ? i18n("Sorted by %1", ctl.sortText) : i18n("Sort by")
                             checked: ctl.sorted
@@ -172,7 +188,7 @@ PlasmoidItem {
                             onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
                         }
                         NavButton {
-                            visible: !root.settingsOpen && ctl.filter === 1 && ctl.shown.count > 0
+                            visible: !root.settingsOpen && !root.calendarOpen && ctl.filter === 1 && ctl.shown.count > 0
                             iconName: "trash-red"
                             tip: i18n("Delete all completed notes")
                             onClicked: root.confirmDeleteCount = ctl.shown.count
@@ -180,8 +196,11 @@ PlasmoidItem {
                         NavButton {
                             visible: !root.settingsOpen
                             iconName: "plus"
-                            tip: i18n("New note")
-                            onClicked: root.addOpen = true
+                            tip: root.calendarOpen ? i18n("New note due on the chosen day") : i18n("New note")
+                            onClicked: {
+                                root.newNoteDue = root.calendarOpen ? calendarPage.selectedDay : 0
+                                root.addOpen = true
+                            }
                         }
 
                         PlasmaComponents3.Menu {
@@ -245,7 +264,7 @@ PlasmoidItem {
 
                     // a forced order is on: say so, and offer the way back to your own order
                     RowLayout {
-                        visible: !root.settingsOpen && ctl.sorted
+                        visible: !root.settingsOpen && !root.calendarOpen && ctl.sorted
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.smallSpacing
@@ -292,7 +311,7 @@ PlasmoidItem {
                     StackLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        currentIndex: root.settingsOpen ? 1 : 0
+                        currentIndex: root.settingsOpen ? 1 : root.calendarOpen ? 2 : 0
 
                         ListView {
                             id: list
@@ -1005,6 +1024,12 @@ PlasmoidItem {
                                 }
                             }
                         }
+
+                        CalendarPage {
+                            id: calendarPage
+                            app: root
+                            controller: ctl
+                        }
                     }
                 }
             }
@@ -1275,6 +1300,7 @@ PlasmoidItem {
             function close() {
                 root.addOpen = false
                 root.editNote = null
+                root.newNoteDue = 0
             }
 
             function submit() {
@@ -1291,7 +1317,7 @@ PlasmoidItem {
             onVisibleChanged: if (visible) {
                 titleField.text = editing ? root.editNote.title : ""
                 descField.text = editing ? root.editNote.description : ""
-                due = editing ? root.editNote.dueDate : 0
+                due = editing ? root.editNote.dueDate : root.newNoteDue
                 calendar.showMonthOf(due)
                 titleField.forceActiveFocus()
             }

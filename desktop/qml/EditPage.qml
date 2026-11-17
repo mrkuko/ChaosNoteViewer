@@ -17,6 +17,7 @@ Rectangle {
     function close() {
         app.addOpen = false
         app.editNote = null
+        app.newNoteDue = 0
     }
 
     function submit() {
@@ -33,7 +34,7 @@ Rectangle {
     onVisibleChanged: if (visible) {
         titleField.text = editing ? app.editNote.title : ""
         descField.text = editing ? app.editNote.description : ""
-        due = editing ? app.editNote.dueDate : 0
+        due = editing ? app.editNote.dueDate : app.newNoteDue
         calendar.showMonthOf(due)
         titleField.forceActiveFocus()
     }

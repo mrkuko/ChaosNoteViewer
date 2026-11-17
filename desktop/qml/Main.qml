@@ -23,6 +23,10 @@ ApplicationWindow {
     // UI state of this launcher
     property bool settingsOpen: !ctl.setupSeen   // first run opens on the API key setup
     property bool addOpen: false
+    // the calendar of deadlines is shown instead of the notes list
+    property bool calendarOpen: false
+    // deadline a new note starts with (the day chosen in the calendar), 0 = none
+    property double newNoteDue: 0
     // the note being edited in the same page as "New note"; null = not editing
     property var editNote: null
     // number of notes the "delete all completed" confirmation is asking about; 0 = not asking
@@ -96,11 +100,22 @@ ApplicationWindow {
                         iconName: modelData.icon
                         tip: modelData.text
                         // not checkable: a click would break the binding, the binding decides
-                        checked: !root.settingsOpen && ctl.filter === modelData.filter
+                        checked: !root.settingsOpen && !root.calendarOpen && ctl.filter === modelData.filter
                         onClicked: {
                             root.settingsOpen = false
+                            root.calendarOpen = false
                             ctl.filter = modelData.filter
                         }
+                    }
+                }
+
+                NavButton {
+                    iconName: "calendar"
+                    tip: qsTr("Calendar of deadlines")
+                    checked: !root.settingsOpen && root.calendarOpen
+                    onClicked: {
+                        root.settingsOpen = false
+                        root.calendarOpen = true
                     }
                 }
 
@@ -134,11 +149,12 @@ ApplicationWindow {
                         font.weight: Font.Black
                         elide: Text.ElideRight
                         text: root.settingsOpen ? qsTr("Settings")
+                            : root.calendarOpen ? qsTr("Calendar")
                             : [qsTr("Open notes"), qsTr("Completed"), qsTr("All notes"), qsTr("Important")][ctl.filter]
                     }
                     NavButton {
                         id: sortButton
-                        visible: !root.settingsOpen
+                        visible: !root.settingsOpen && !root.calendarOpen
                         iconName: "filter"
                         tip: ctl.sorted ? qsTr("Sorted by %1").arg(ctl.sortText) : qsTr("Sort by")
                         checked: ctl.sorted
@@ -146,7 +162,7 @@ ApplicationWindow {
                         onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
                     }
                     NavButton {
-                        visible: !root.settingsOpen && ctl.filter === 1 && ctl.shown.count > 0
+                        visible: !root.settingsOpen && !root.calendarOpen && ctl.filter === 1 && ctl.shown.count > 0
                         iconName: "trash-red"
                         tip: qsTr("Delete all completed notes")
                         onClicked: root.confirmDeleteCount = ctl.shown.count
@@ -154,8 +170,11 @@ ApplicationWindow {
                     NavButton {
                         visible: !root.settingsOpen
                         iconName: "plus"
-                        tip: qsTr("New note")
-                        onClicked: root.addOpen = true
+                        tip: root.calendarOpen ? qsTr("New note due on the chosen day") : qsTr("New note")
+                        onClicked: {
+                            root.newNoteDue = root.calendarOpen ? calendarPage.selectedDay : 0
+                            root.addOpen = true
+                        }
                     }
 
                     // step 1: what to sort by. The direction is step 2, the switch under the title.
@@ -190,7 +209,7 @@ ApplicationWindow {
 
                 // a forced order is on: say so, and offer the way back to your own order
                 RowLayout {
-                    visible: !root.settingsOpen && ctl.sorted
+                    visible: !root.settingsOpen && !root.calendarOpen && ctl.sorted
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.large
                     Layout.rightMargin: Theme.small
@@ -237,10 +256,11 @@ ApplicationWindow {
                 StackLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    currentIndex: root.settingsOpen ? 1 : 0
+                    currentIndex: root.settingsOpen ? 1 : root.calendarOpen ? 2 : 0
 
                     NotesList { app: root }
                     SettingsPage { app: root }
+                    CalendarPage { id: calendarPage; app: root }
                 }
             }
         }

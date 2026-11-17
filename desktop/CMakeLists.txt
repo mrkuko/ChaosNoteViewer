@@ -69,6 +69,7 @@ qt_add_qml_module(chaosnoteviewer
         src/SecureRandom.cpp
     QML_FILES
         qml/Main.qml
+        qml/CalendarPage.qml
         qml/ConfirmBox.qml
         qml/DeadlineCalendar.qml
         qml/DetailPage.qml
