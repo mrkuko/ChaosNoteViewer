@@ -157,7 +157,14 @@ class NotesViewModel(
         viewModelScope.launch { repo.setCompleted(id, change.note.completed) }
     }
 
-    private fun endGhosts() {
+    // Everything the calendar needs: all live notes (as they were before a swipe, while it is a ghost, so the row
+    // keeps its place) and the ghosts.
+    val calendar: StateFlow<Pair<List<NoteEntity>, Map<String, Boolean>>> = combine(repo.alive, recent) { all, changes ->
+        all.map { changes[it.id]?.note ?: it } to RecentChanges.ghosts(changes)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<NoteEntity>() to emptyMap())
+
+    // the ghosts belong to the screen they were swiped in
+    fun endGhosts() {
         ghostTimers.values.forEach { it.cancel() }
         ghostTimers.clear()
         recent.value = emptyMap()

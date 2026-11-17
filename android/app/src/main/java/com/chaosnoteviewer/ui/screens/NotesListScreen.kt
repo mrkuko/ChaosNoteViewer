@@ -76,7 +76,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (String) -> Unit, onNewNote: () -> Unit, onOpenSettings: () -> Unit) {
+fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (String) -> Unit, onNewNote: () -> Unit, onOpenSettings: () -> Unit, onOpenCalendar: () -> Unit = {}) {
     val state by vm.list.collectAsStateWithLifecycle()
     val sync by syncVm.state.collectAsStateWithLifecycle()
     val drawer = rememberDrawerState(DrawerValue.Closed)
@@ -108,6 +108,14 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                         onClick = { vm.setFilter(f); scope.launch { drawer.close() } },
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
+                // under Important, like on desktop
+                NavigationDrawerItem(
+                    icon = { AppIcon("calendar") },
+                    label = { Text("Calendar") },
+                    selected = false,
+                    onClick = { scope.launch { drawer.close() }; onOpenCalendar() },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
                 Spacer(Modifier.weight(1f))
                 HorizontalDivider(Modifier.padding(horizontal = 28.dp))
                 NavigationDrawerItem(
@@ -373,7 +381,7 @@ private fun OverdueDivider(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun NoteRow(
+internal fun NoteRow(
     note: NoteEntity,
     startOfToday: Long,
     missing: Boolean,
@@ -434,7 +442,7 @@ private fun NoteRow(
 // that direction would pull the menu out as well.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeRow(completed: Boolean, enabled: Boolean, onSwiped: () -> Unit, content: @Composable () -> Unit) {
+internal fun SwipeRow(completed: Boolean, enabled: Boolean, onSwiped: () -> Unit, content: @Composable () -> Unit) {
     val haptic = LocalHapticFeedback.current
     // the swipe state is created once per row and keeps the lambda it was given then; the row moves when notes
     // above it come and go, so the current onSwiped (with the current index) has to be looked up at the swipe
@@ -478,7 +486,7 @@ private fun SwipeRow(completed: Boolean, enabled: Boolean, onSwiped: () -> Unit,
 // What a swiped row turns into, in the same place: it says what happened and offers to take it back.
 // After a few seconds it collapses away (the view model drops it).
 @Composable
-private fun GhostRow(note: NoteEntity, completed: Boolean, onUndo: () -> Unit, modifier: Modifier = Modifier) {
+internal fun GhostRow(note: NoteEntity, completed: Boolean, onUndo: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),

@@ -33,13 +33,13 @@ import androidx.compose.ui.unit.dp
 import com.chaosnoteviewer.ui.Dates
 import com.chaosnoteviewer.ui.NotesViewModel
 
-// noteId == null: a new note
+// noteId == null: a new note, with the deadline preset to [initialDue] (from the calendar) when given
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditScreen(vm: NotesViewModel, noteId: String?, onDone: () -> Unit) {
+fun EditScreen(vm: NotesViewModel, noteId: String?, onDone: () -> Unit, initialDue: Long? = null) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
-    var dueDate by rememberSaveable { mutableStateOf<Long?>(null) }     // local midnight
+    var dueDate by rememberSaveable { mutableStateOf(if (noteId == null) initialDue else null) }     // local midnight
     var loaded by rememberSaveable { mutableStateOf(noteId == null) }
     var picking by rememberSaveable { mutableStateOf(false) }
 

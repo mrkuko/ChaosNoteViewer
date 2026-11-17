@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.chaosnoteviewer.ui.screens.CalendarScreen
 import com.chaosnoteviewer.ui.screens.DetailScreen
 import com.chaosnoteviewer.ui.screens.EditScreen
 import com.chaosnoteviewer.ui.screens.NotesListScreen
@@ -18,11 +19,13 @@ import com.chaosnoteviewer.ui.screens.SettingsScreen
 object Routes {
     const val LIST = "list"
     const val DETAIL = "detail/{id}"
-    const val EDIT = "edit?id={id}"         // no id = new note
+    const val EDIT = "edit?id={id}&due={due}"   // no id = new note; due = preset deadline (local midnight millis)
     const val SETTINGS = "settings"
+    const val CALENDAR = "calendar"
 
     fun detail(id: String) = "detail/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
+    fun newDueOn(dueDate: Long) = "edit?due=$dueDate"
 }
 
 @Composable
@@ -54,6 +57,7 @@ fun AppNavigation(launch: LaunchRequest = LaunchRequest(), onLaunchHandled: () -
                 onOpenNote = { nav.navigate(Routes.detail(it)) },
                 onNewNote = { nav.navigate(Routes.edit()) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenCalendar = { nav.navigate(Routes.CALENDAR) },
             )
         }
         composable(Routes.DETAIL, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
@@ -68,12 +72,25 @@ fun AppNavigation(launch: LaunchRequest = LaunchRequest(), onLaunchHandled: () -
         }
         composable(
             Routes.EDIT,
-            arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            arguments = listOf(
+                navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("due") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
         ) { entry ->
             EditScreen(
                 vm = vm,
                 noteId = entry.arguments?.getString("id"),
+                initialDue = entry.arguments?.getString("due")?.toLongOrNull(),
                 onDone = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.CALENDAR) {
+            CalendarScreen(
+                vm = vm,
+                onBack = { nav.popBackStack() },
+                onOpenNote = { nav.navigate(Routes.detail(it)) },
+                onEditNote = { nav.navigate(Routes.edit(it)) },
+                onNewNote = { nav.navigate(Routes.newDueOn(it)) },
             )
         }
         composable(Routes.SETTINGS) {
