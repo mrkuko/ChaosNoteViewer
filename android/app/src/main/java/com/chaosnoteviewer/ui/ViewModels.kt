@@ -36,6 +36,7 @@ data class ListState(
     val filter: NoteFilter = NoteFilter.OPEN,
     val sort: SortField = SortField.OWN,
     val desc: Boolean = false,
+    val starredFirst: Boolean = false,
     val startOfToday: Long = NoteQuery.startOfToday(),
     val loaded: Boolean = false,
     // notes the cloud no longer has (deleted on another device), shown with a warning
@@ -44,6 +45,8 @@ data class ListState(
     val ghosts: Map<String, Boolean> = emptyMap(),
 ) {
     val sorted: Boolean get() = sort != SortField.OWN
+    // a forced order of any kind: dragging to reorder is off
+    val dragLocked: Boolean get() = sorted || starredFirst
     val sortText: String get() = if (sorted) "${sort.label}: ${if (desc) sort.descending else sort.ascending}" else sort.label
 }
 
@@ -57,6 +60,7 @@ class NotesViewModel(
     private val recent = MutableStateFlow<Map<String, RecentChange>>(emptyMap())
     private val ghostTimers = HashMap<String, Job>()
     private val sort = MutableStateFlow(SortField.OWN to false)
+    private val starredFirst = MutableStateFlow(false)
 
     // local midnight of today, emitted again right after each midnight (overdue / Important depend on it)
     private val today = flow {
@@ -70,13 +74,14 @@ class NotesViewModel(
         }
     }.distinctUntilChanged()
 
-    private val base: Flow<ListState> = combine(repo.alive, filter, sort, today, missing) { all, f, (s, d), today, gone ->
+    private val base: Flow<ListState> = combine(repo.alive, filter, combine(sort, starredFirst) { so, sf -> so to sf }, today, missing) { all, f, (so, sf), today, gone ->
+        val (s, d) = so
         ListState(
-            shown = NoteQuery.shown(all, f, s, d, today),
+            shown = NoteQuery.shown(all, f, s, d, today, starredFirst = sf),
             total = all.size,
             completedCount = all.count { it.completed },
             counts = NoteFilter.entries.associateWith { fl -> all.count { NoteQuery.matches(it, fl, today) } },
-            filter = f, sort = s, desc = d, startOfToday = today, loaded = true, missing = gone,
+            filter = f, sort = s, desc = d, starredFirst = sf, startOfToday = today, loaded = true, missing = gone,
         )
     }
 
@@ -90,6 +95,7 @@ class NotesViewModel(
             val field = repo.getState(StateKeys.SORT_FIELD).toIntOrNull()
             if (field != null && field in SortField.entries.indices)
                 sort.value = SortField.entries[field] to (repo.getState(StateKeys.SORT_DESC) == "1")
+            starredFirst.value = repo.getState(StateKeys.STARRED_FIRST) == "1"
         }
     }
 
@@ -104,6 +110,11 @@ class NotesViewModel(
             repo.setState(StateKeys.SORT_FIELD, field.ordinal.toString())
             repo.setState(StateKeys.SORT_DESC, if (desc) "1" else "0")
         }
+    }
+
+    fun setStarredFirst(on: Boolean) {
+        starredFirst.value = on
+        viewModelScope.launch { repo.setState(StateKeys.STARRED_FIRST, if (on) "1" else "0") }
     }
 
     fun observe(id: String) = repo.observe(id)

@@ -26,6 +26,8 @@ object StateKeys {
     const val CURSOR_ID = "cursor_id"
     const val SORT_FIELD = "sort_field"
     const val SORT_DESC = "sort_desc"
+    // per-device switch (not synced): starred notes first, in front of whatever order is chosen; "1" = on
+    const val STARRED_FIRST = "starred_first"
     // the encryption key of the cloud copy, wrapped by the Android Keystore (crypto/KeyStorage.kt), and whether
     // the user saw it and confirmed they saved it; same names as on desktop, other content
     const val ENC_KEY = "enc_key"

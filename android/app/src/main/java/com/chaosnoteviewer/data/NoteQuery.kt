@@ -58,10 +58,13 @@ object NoteQuery {
         desc: Boolean,
         startOfToday: Long,
         collator: Collator = Collator.getInstance(),
+        starredFirst: Boolean = false,
     ): List<NoteEntity> {
         val rows = notes.filter { matches(it, filter, startOfToday) }
+        // a stable partition after the sort: starred notes lead, each part keeps the chosen order
+        fun lead(l: List<NoteEntity>) = if (starredFirst) l.sortedByDescending { it.starred } else l
         if (sort == SortField.OWN)
-            return rows
+            return lead(rows)
         val dir = if (desc) -1 else 1
         val cmp = Comparator<NoteEntity> { a, b ->
             val d = when (sort) {
@@ -77,6 +80,6 @@ object NoteQuery {
             }
             if (d != 0) d else a.position.compareTo(b.position)
         }
-        return rows.sortedWith(cmp)
+        return lead(rows.sortedWith(cmp))
     }
 }

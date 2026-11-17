@@ -83,4 +83,25 @@ class NoteQueryTest {
         assertFalse(SortField.DEADLINE.defaultDesc)
         assertTrue(SortField.CREATED.defaultDesc)
     }
+
+    private fun star(n: NoteEntity) = n.copy(starred = true)
+
+    // starred first is a stable partition after the sort, for every field and direction
+    @Test fun starredFirstKeepsTheChosenOrderInsideEachPart() {
+        val notes = listOf(
+            note("b", 1.0, due = today + 2 * DAY_MS, created = 3), star(note("d", 2.0, due = today, created = 1)),
+            note("a", 3.0, due = today + DAY_MS, created = 2), star(note("c", 4.0, created = 4)),
+        )
+        fun on(s: SortField, desc: Boolean = false) =
+            titles(NoteQuery.shown(notes, NoteFilter.ALL, s, desc, today, collator, starredFirst = true))
+        assertEquals(listOf("d", "c", "b", "a"), on(SortField.OWN))
+        assertEquals(listOf("c", "d", "a", "b"), on(SortField.NAME))
+        assertEquals(listOf("d", "c", "a", "b"), on(SortField.DEADLINE))
+        assertEquals(listOf("c", "d", "b", "a"), on(SortField.CREATED, true))
+    }
+
+    @Test fun starredFirstOffChangesNothing() {
+        val notes = listOf(note("a", 1.0), star(note("b", 2.0)))
+        assertEquals(listOf("a", "b"), titles(NoteQuery.shown(notes, NoteFilter.ALL, SortField.OWN, false, today, collator)))
+    }
 }

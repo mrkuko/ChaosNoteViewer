@@ -144,6 +144,13 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
                                         else MaterialTheme.colorScheme.onSurface,
                                     )
                             }
+                        IconButton(onClick = { vm.setStarredFirst(!state.starredFirst) }) {
+                            AppIcon(
+                                if (state.starredFirst) "star-filled" else "star",
+                                if (state.starredFirst) "Starred notes first, tap to turn off" else "Show starred notes first",
+                                tint = if (state.starredFirst) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                         Box {
                             IconButton(onClick = { sortMenu = true }) {
                                 AppIcon("sort", "Sort")
@@ -174,11 +181,11 @@ fun NotesListScreen(vm: NotesViewModel, syncVm: SyncViewModel, onOpenNote: (Stri
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
                 // a forced order is on: show it, a tap goes back to your own order
-                if (state.sorted)
+                if (state.dragLocked)
                     Row(Modifier.padding(horizontal = 12.dp)) {
                         AssistChip(
-                            onClick = { vm.setSort(SortField.OWN, false) },
-                            label = { Text(state.sortText) },
+                            onClick = { if (state.sorted) vm.setSort(SortField.OWN, false) else vm.setStarredFirst(false) },
+                            label = { Text(if (state.sorted) state.sortText else "Starred first") },
                             trailingIcon = { AppIcon("x-circle", "Back to your order", size = 18.dp) },
                         )
                     }
@@ -297,7 +304,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
                 HorizontalDivider(Modifier.animateItem())
                 return@itemsIndexed
             }
-            ReorderableItem(reorder, key = note.id, enabled = !state.sorted) { isDragging ->
+            ReorderableItem(reorder, key = note.id, enabled = !state.dragLocked) { isDragging ->
                 SwipeRow(
                     completed = note.completed,
                     enabled = !isDragging,
@@ -310,7 +317,7 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
                             missing = note.id in state.missing,
                             onOpen = { onOpenNote(note.id) },
                             onStar = { vm.setStarred(note.id, it) },
-                            handle = if (state.sorted) null else {
+                            handle = if (state.dragLocked) null else {
                                 {
                                     IconButton(
                                         onClick = {},
