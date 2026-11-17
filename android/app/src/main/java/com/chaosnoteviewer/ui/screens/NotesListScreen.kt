@@ -1,7 +1,12 @@
 package com.chaosnoteviewer.ui.screens
 
 import com.chaosnoteviewer.ui.AppIcon
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,10 +16,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DrawerValue
@@ -39,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
@@ -277,38 +284,55 @@ private fun NotesList(state: ListState, vm: NotesViewModel, onOpenNote: (String)
     }
 
     LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 88.dp), modifier = Modifier.fillMaxSize()) {
-        items(rows, key = { it.id }) { note ->
+        itemsIndexed(rows, key = { _, note -> note.id }) { index, note ->
+            val ghost = state.ghosts[note.id]
+            if (ghost != null) {
+                // just swiped: the row stays here for a few seconds, with a way back
+                GhostRow(
+                    note = note,
+                    completed = ghost,
+                    onUndo = { vm.undoSwipe(note.id) },
+                    modifier = Modifier.animateItem(),
+                )
+                HorizontalDivider(Modifier.animateItem())
+                return@itemsIndexed
+            }
             ReorderableItem(reorder, key = note.id, enabled = !state.sorted) { isDragging ->
-                Surface(tonalElevation = if (isDragging) 6.dp else 0.dp, shadowElevation = if (isDragging) 6.dp else 0.dp) {
-                    NoteRow(
-                        note = note,
-                        startOfToday = state.startOfToday,
-                        missing = note.id in state.missing,
-                        onOpen = { onOpenNote(note.id) },
-                        onCompleted = { vm.setCompleted(note.id, it) },
-                        handle = if (state.sorted) null else {
-                            {
-                                IconButton(
-                                    onClick = {},
-                                    modifier = Modifier.draggableHandle(
-                                        onDragStarted = {
-                                            dragging = note.id
-                                            dragSnapshot = state.shown
-                                        },
-                                        onDragStopped = {
-                                            val from = dragSnapshot.indexOfFirst { it.id == note.id }
-                                            val to = rows.indexOfFirst { it.id == note.id }
-                                            if (from >= 0 && to >= 0 && from != to)
-                                                vm.move(dragSnapshot, from, to)
-                                            dragging = null
-                                        },
-                                    ),
-                                ) {
-                                    AppIcon("menu", "Drag to reorder")
+                SwipeRow(
+                    completed = note.completed,
+                    enabled = !isDragging,
+                    onSwiped = { vm.swipe(note, index) },
+                ) {
+                    Surface(tonalElevation = if (isDragging) 6.dp else 0.dp, shadowElevation = if (isDragging) 6.dp else 0.dp) {
+                        NoteRow(
+                            note = note,
+                            startOfToday = state.startOfToday,
+                            missing = note.id in state.missing,
+                            onOpen = { onOpenNote(note.id) },
+                            handle = if (state.sorted) null else {
+                                {
+                                    IconButton(
+                                        onClick = {},
+                                        modifier = Modifier.draggableHandle(
+                                            onDragStarted = {
+                                                dragging = note.id
+                                                dragSnapshot = state.shown
+                                            },
+                                            onDragStopped = {
+                                                val from = dragSnapshot.indexOfFirst { it.id == note.id }
+                                                val to = rows.indexOfFirst { it.id == note.id }
+                                                if (from >= 0 && to >= 0 && from != to)
+                                                    vm.move(dragSnapshot, from, to)
+                                                dragging = null
+                                            },
+                                        ),
+                                    ) {
+                                        AppIcon("menu", "Drag to reorder")
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
             }
             HorizontalDivider()
@@ -322,14 +346,12 @@ private fun NoteRow(
     startOfToday: Long,
     missing: Boolean,
     onOpen: () -> Unit,
-    onCompleted: (Boolean) -> Unit,
     handle: (@Composable () -> Unit)?,
 ) {
     val link = MaterialTheme.colorScheme.primary
     ListItem(
         modifier = Modifier.clickable(onClick = onOpen).alpha(if (note.completed) 0.55f else 1f),
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        leadingContent = { Checkbox(checked = note.completed, onCheckedChange = onCompleted) },
         headlineContent = {
             Text(
                 linkify(note.title, link),
@@ -361,4 +383,85 @@ private fun NoteRow(
         },
         trailingContent = handle,
     )
+}
+
+// A note is completed (or, in the Completed list, reopened) by pulling its row to the left, never by a tap, which
+// is too easy to do by accident. Past 40 % of the width the swipe counts, the row then turns into a GhostRow.
+// Only to the left: the navigation drawer opens by a drag to the right anywhere on the screen, so a swipe in
+// that direction would pull the menu out as well.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeRow(completed: Boolean, enabled: Boolean, onSwiped: () -> Unit, content: @Composable () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    // the swipe state is created once per row and keeps the lambda it was given then; the row moves when notes
+    // above it come and go, so the current onSwiped (with the current index) has to be looked up at the swipe
+    val currentOnSwiped by rememberUpdatedState(onSwiped)
+    val state = rememberSwipeToDismissBoxState(
+        positionalThreshold = { it * 0.4f },
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.Settled) false
+            else {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                currentOnSwiped()
+                true
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = enabled,
+        backgroundContent = {
+            val dir = state.dismissDirection
+            if (dir != SwipeToDismissBoxValue.Settled)
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(if (completed) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIcon(if (completed) "undo" else "check-double")
+                        Text(
+                            if (completed) "  Back to open" else "  Done",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+        },
+    ) { content() }
+}
+
+// What a swiped row turns into, in the same place: it says what happened and offers to take it back.
+// After a few seconds it collapses away (the view model drops it).
+@Composable
+private fun GhostRow(note: NoteEntity, completed: Boolean, onUndo: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (completed) "Marked as done" else "Moved back to open notes",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                note.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textDecoration = if (completed) TextDecoration.LineThrough else null,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // looks like a link, not like a filled button
+        Text(
+            "Undo",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier.clickable(role = Role.Button, onClick = onUndo).padding(horizontal = 16.dp, vertical = 14.dp),
+        )
+    }
 }

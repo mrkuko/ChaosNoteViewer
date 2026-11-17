@@ -13,6 +13,7 @@ import com.chaosnoteviewer.data.NoteQuery
 import com.chaosnoteviewer.data.NotesRepository
 import com.chaosnoteviewer.data.SortField
 import com.chaosnoteviewer.data.StateKeys
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ListState(
@@ -38,13 +40,22 @@ data class ListState(
     val loaded: Boolean = false,
     // notes the cloud no longer has (deleted on another device), shown with a warning
     val missing: Set<String> = emptySet(),
+    // rows that were just swiped: id -> true = completed, false = reopened. They show "Marked as done" and Undo.
+    val ghosts: Map<String, Boolean> = emptyMap(),
 ) {
     val sorted: Boolean get() = sort != SortField.OWN
     val sortText: String get() = if (sorted) "${sort.label}: ${if (desc) sort.descending else sort.ascending}" else sort.label
 }
 
-class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String>>) : ViewModel() {
+class NotesViewModel(
+    private val repo: NotesRepository,
+    missing: Flow<Set<String>>,
+    // how long a swiped row stays as a ghost with its Undo
+    private val ghostMillis: Long = GHOST_MILLIS,
+) : ViewModel() {
     private val filter = MutableStateFlow(NoteFilter.OPEN)
+    private val recent = MutableStateFlow<Map<String, RecentChange>>(emptyMap())
+    private val ghostTimers = HashMap<String, Job>()
     private val sort = MutableStateFlow(SortField.OWN to false)
 
     // local midnight of today, emitted again right after each midnight (overdue / Important depend on it)
@@ -59,7 +70,7 @@ class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String
         }
     }.distinctUntilChanged()
 
-    val list: StateFlow<ListState> = combine(repo.alive, filter, sort, today, missing) { all, f, (s, d), today, gone ->
+    private val base: Flow<ListState> = combine(repo.alive, filter, sort, today, missing) { all, f, (s, d), today, gone ->
         ListState(
             shown = NoteQuery.shown(all, f, s, d, today),
             total = all.size,
@@ -67,6 +78,10 @@ class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String
             counts = NoteFilter.entries.associateWith { fl -> all.count { NoteQuery.matches(it, fl, today) } },
             filter = f, sort = s, desc = d, startOfToday = today, loaded = true, missing = gone,
         )
+    }
+
+    val list: StateFlow<ListState> = combine(base, recent) { state, changes ->
+        state.copy(shown = RecentChanges.apply(state.shown, changes), ghosts = RecentChanges.ghosts(changes))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListState())
 
     init {
@@ -78,7 +93,10 @@ class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String
         }
     }
 
-    fun setFilter(f: NoteFilter) { filter.value = f }
+    fun setFilter(f: NoteFilter) {
+        endGhosts()          // the ghosts belong to the list they were swiped in
+        filter.value = f
+    }
 
     fun setSort(field: SortField, desc: Boolean = field.defaultDesc) {
         sort.value = field to desc
@@ -92,6 +110,34 @@ class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String
     suspend fun get(id: String) = repo.get(id)
 
     fun setCompleted(id: String, completed: Boolean) = viewModelScope.launch { repo.setCompleted(id, completed) }
+
+    // A swipe on the row at [index] of the list: complete the note, or reopen it when it is completed. The note
+    // is changed at once; its row stays as a ghost with an Undo for [ghostMillis].
+    fun swipe(note: NoteEntity, index: Int) {
+        val toCompleted = !note.completed
+        recent.update { it + (note.id to RecentChange(note, toCompleted, index)) }
+        ghostTimers.remove(note.id)?.cancel()
+        ghostTimers[note.id] = viewModelScope.launch {
+            delay(ghostMillis)
+            ghostTimers.remove(note.id)
+            recent.update { it - note.id }
+        }
+        viewModelScope.launch { repo.setCompleted(note.id, toCompleted) }
+    }
+
+    // Undo on a ghost: the note goes back to how it was, its row is a normal row again.
+    fun undoSwipe(id: String) {
+        val change = recent.value[id] ?: return
+        ghostTimers.remove(id)?.cancel()
+        recent.update { it - id }
+        viewModelScope.launch { repo.setCompleted(id, change.note.completed) }
+    }
+
+    private fun endGhosts() {
+        ghostTimers.values.forEach { it.cancel() }
+        ghostTimers.clear()
+        recent.value = emptyMap()
+    }
     fun delete(id: String) = viewModelScope.launch { repo.delete(id) }
     fun deleteCompleted() = viewModelScope.launch { repo.deleteCompleted() }
 
@@ -105,6 +151,8 @@ class NotesViewModel(private val repo: NotesRepository, missing: Flow<Set<String
     }
 
     companion object {
+        const val GHOST_MILLIS = 5_000L
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ChaosApp
