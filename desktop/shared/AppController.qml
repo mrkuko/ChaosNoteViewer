@@ -66,18 +66,40 @@ Item {
     property int filter: 0
     readonly property int importantDays: 3
     // Order of the list. sortField: 0 = your own order (drag to reorder), 1 = name, 2 = deadline,
-    // 3 = date created. sortDesc flips the direction (name A-Z / Z-A, deadline closest / furthest first,
-    // created oldest / newest first). Any field but 0 is a forced order: dragging is off while it is on.
-    // Both are kept on this device (sync_state sort_field, sort_desc), not synced.
+    // 3 = date created, 4 = upcoming then overdue (only in the important view, and its default there).
+    // sortDesc flips the direction (name A-Z / Z-A, deadline closest / furthest first, created oldest /
+    // newest first; 4 has none). Any field but 0 is a forced order: dragging is off while it is on.
+    // The important view keeps its own order, the other views share one. Both are kept on this device
+    // (sync_state sort_field, sort_desc and important_sort_field, important_sort_desc), not synced.
     property int sortField: 0
     property bool sortDesc: false
     readonly property bool sorted: sortField !== 0
-    readonly property var sortFieldNames: ["Your order", "Name", "Deadline", "Date created"]
-    // the two directions of each field, [ascending, descending]; index 0 has none
-    readonly property var sortDirectionNames: [["", ""], ["A–Z", "Z–A"], ["Closest first", "Furthest first"], ["Oldest first", "Newest first"]]
+    readonly property int upcomingSort: 4
+    readonly property var sortFieldNames: ["Your order", "Name", "Deadline", "Date created", "Upcoming, then overdue"]
+    // the two directions of each field, [ascending, descending]; 0 and 4 have none
+    readonly property var sortDirectionNames: [["", ""], ["A–Z", "Z–A"], ["Closest first", "Furthest first"], ["Oldest first", "Newest first"], ["", ""]]
     // icons of the two directions, same order as sortDirectionNames (icons/<name>.png)
-    readonly property var sortDirectionIcons: [["", ""], ["sort-az", "sort-za"], ["sort-up", "sort-down"], ["sort-up", "sort-down"]]
-    readonly property string sortText: sorted ? sortFieldNames[sortField] + ": " + sortDirectionNames[sortField][sortDesc ? 1 : 0] : sortFieldNames[0]
+    readonly property var sortDirectionIcons: [["", ""], ["sort-az", "sort-za"], ["sort-up", "sort-down"], ["sort-up", "sort-down"], ["", ""]]
+    readonly property bool sortHasDirection: sortField !== 0 && sortField !== upcomingSort
+    readonly property string sortText: sortHasDirection ? sortFieldNames[sortField] + ": " + sortDirectionNames[sortField][sortDesc ? 1 : 0]
+                                                        : sortFieldNames[sortField]
+    // true while the order of another view is being loaded, so loading it doesn't save it again
+    property bool loadingSort: false
+
+    // where the order of the current view is kept
+    function sortKey(name) {
+        return filter === 3 ? "important_" + name : name
+    }
+
+    // the saved order of the current view; the important view starts with upcoming-then-overdue
+    function loadSort() {
+        loadingSort = true
+        const saved = parseInt(NoteStore.getState(sortKey("sort_field")), 10)
+        const valid = saved >= 0 && saved < sortFieldNames.length && (saved !== upcomingSort || filter === 3)
+        sortDesc = NoteStore.getState(sortKey("sort_desc")) === "1"
+        sortField = valid ? saved : filter === 3 ? upcomingSort : 0
+        loadingSort = false
+    }
 
     // choosing a field starts with its natural direction: A-Z, closest first, newest first
     function setSortField(field) {
@@ -137,7 +159,15 @@ Item {
     function compare(a, b) {
         const dir = sortDesc ? -1 : 1
         let d = 0
-        if (sortField === 1) {
+        if (sortField === upcomingSort) {
+            // upcoming first, closest deadline first; then the overdue ones, the most recently missed first
+            const today = startOfToday()
+            const aLate = a.dueDate < today, bLate = b.dueDate < today
+            if (aLate !== bLate)
+                d = aLate ? 1 : -1
+            else
+                d = aLate ? b.dueDate - a.dueDate : a.dueDate - b.dueDate
+        } else if (sortField === 1) {
             d = a.title.localeCompare(b.title) * dir
         } else if (sortField === 2) {
             if (a.dueDate > 0 && b.dueDate > 0)
@@ -158,12 +188,16 @@ Item {
     function refresh() {
         ++revision
         const rows = []
+        // in upcoming-then-overdue order the overdue notes are their own section (ListView.section)
+        const split = sortField === upcomingSort && filter === 3
+        const today = startOfToday()
         for (let i = 0; i < notes.count; ++i) {
             const n = notes.get(i)
             if (matches(n))
                 rows.push({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed,
                             dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
-                            missing: missingIds[n.noteId] === true })
+                            missing: missingIds[n.noteId] === true,
+                            group: split && n.dueDate > 0 && n.dueDate < today ? "overdue" : "" })
         }
         // not `sorted`: this also runs from the change handler of sortField, before that flag has updated
         if (sortField !== 0)
@@ -277,13 +311,20 @@ Item {
         scheduleSync()
     }
 
-    onFilterChanged: refresh()
+    onFilterChanged: {
+        loadSort()
+        refresh()
+    }
     onSortFieldChanged: {
-        NoteStore.setState("sort_field", String(sortField))
+        if (loadingSort)
+            return
+        NoteStore.setState(sortKey("sort_field"), String(sortField))
         refresh()
     }
     onSortDescChanged: {
-        NoteStore.setState("sort_desc", sortDesc ? "1" : "0")
+        if (loadingSort)
+            return
+        NoteStore.setState(sortKey("sort_desc"), sortDesc ? "1" : "0")
         refresh()
     }
     // ---- Account (Firebase Authentication, see Auth.js) ----
@@ -689,11 +730,7 @@ Item {
             configured = true
         }
         setupSeen = configured || NoteStore.getState("setup_seen") === "1"
-        const savedField = parseInt(NoteStore.getState("sort_field"), 10)
-        if (savedField >= 0 && savedField < sortFieldNames.length) {
-            sortDesc = NoteStore.getState("sort_desc") === "1"
-            sortField = savedField
-        }
+        loadSort()
         reload()
         restoreSession()
     }

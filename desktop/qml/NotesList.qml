@@ -18,6 +18,39 @@ ListView {
     model: ctl.shown
     ScrollBar.vertical: ScrollBar {}
 
+    // In upcoming-then-overdue order (important view) the overdue notes get a line with "Overdue" above
+    // them: below it is what should have been done already. The upcoming notes have no header.
+    section.property: "group"
+    section.delegate: Item {
+        required property string section
+        width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
+        height: section === "overdue" ? overdueLabel.implicitHeight + Theme.large : 0
+        visible: section === "overdue"
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.topMargin: Theme.small
+            spacing: Theme.medium
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Qt.alpha(Theme.negative, 0.6) }
+            Image {
+                source: Qt.resolvedUrl("../icons/calendar-alert.png")
+                sourceSize: Qt.size(Theme.iconSmall * 2, Theme.iconSmall * 2)
+                smooth: true
+                mipmap: true
+                Layout.preferredWidth: Theme.iconSmall
+                Layout.preferredHeight: Theme.iconSmall
+            }
+            Label {
+                id: overdueLabel
+                text: qsTr("Overdue")
+                color: Theme.negative
+                font.bold: true
+                font.pointSize: Theme.smallFont
+            }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Qt.alpha(Theme.negative, 0.6) }
+        }
+    }
+
     // Drag to reorder. While a card is dragged the other cards only slide out of its way
     // (slot.shift); the models change once, when it is dropped.
     property int dragFrom: -1       // row being dragged, -1 = none

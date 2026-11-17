@@ -207,6 +207,20 @@ PlasmoidItem {
                             id: sortMenu
                             // step 1: what to sort by. The direction is step 2, the switch under the title.
                             width: Kirigami.Units.gridUnit * 18
+                            // exists only in the important view, where it comes first
+                            IconMenuItem {
+                                visible: ctl.filter === 3
+                                height: visible ? implicitHeight : 0
+                                iconName: "calendar-alert"
+                                text: i18n("Upcoming, then overdue")
+                                checkable: true
+                                checked: ctl.sortField === ctl.upcomingSort
+                                onTriggered: {
+                                    if (ctl.sortField !== ctl.upcomingSort)
+                                        ctl.setSortField(ctl.upcomingSort)
+                                    checked = Qt.binding(() => ctl.sortField === ctl.upcomingSort)
+                                }
+                            }
                             IconMenuItem {
                                 iconName: "list"
                                 text: i18n("Your order (drag to reorder)")
@@ -276,7 +290,7 @@ PlasmoidItem {
                         }
                         // step 2: the direction of the chosen mode (A-Z | Z-A, closest | furthest, newest | oldest)
                         Repeater {
-                            model: ctl.sorted ? [false, true] : []
+                            model: ctl.sortHasDirection ? [false, true] : []
                             delegate: NavButton {
                                 required property bool modelData
                                 // Date created lists "newest first" first: that is its natural direction
@@ -322,6 +336,39 @@ PlasmoidItem {
                             leftMargin: Kirigami.Units.smallSpacing
                             rightMargin: Kirigami.Units.smallSpacing
                             model: ctl.shown
+
+                            // In upcoming-then-overdue order (important view) the overdue notes get a line with
+                            // "Overdue" above them: below it is what should have been done already.
+                            section.property: "group"
+                            section.delegate: Item {
+                                required property string section
+                                width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
+                                height: section === "overdue" ? overdueLabel.implicitHeight + Kirigami.Units.largeSpacing * 1.5 : 0
+                                visible: section === "overdue"
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.topMargin: Kirigami.Units.smallSpacing
+                                    spacing: Kirigami.Units.largeSpacing
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Qt.alpha(Kirigami.Theme.negativeTextColor, 0.6) }
+                                    Image {
+                                        source: Qt.resolvedUrl("icons/calendar-alert.png")
+                                        sourceSize: Qt.size(Kirigami.Units.iconSizes.small * 2, Kirigami.Units.iconSizes.small * 2)
+                                        smooth: true
+                                        mipmap: true
+                                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    }
+                                    PlasmaComponents3.Label {
+                                        id: overdueLabel
+                                        text: i18n("Overdue")
+                                        color: Kirigami.Theme.negativeTextColor
+                                        font.bold: true
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                    }
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Qt.alpha(Kirigami.Theme.negativeTextColor, 0.6) }
+                                }
+                            }
 
 
                             // Drag to reorder. While a card is dragged the other cards only slide out of its way

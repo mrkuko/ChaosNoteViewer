@@ -182,12 +182,13 @@ ApplicationWindow {
                         id: sortMenu
                         width: 260
                         Repeater {
-                            model: [
+                            // upcoming-then-overdue exists only in the important view, where it comes first
+                            model: (ctl.filter === 3 ? [{ field: ctl.upcomingSort, text: qsTr("Upcoming, then overdue"), icon: "calendar-alert" }] : []).concat([
                                 { field: 0, text: qsTr("Your order (drag to reorder)"), icon: "list" },
                                 { field: 1, text: qsTr("Name"), icon: "sort-az" },
                                 { field: 2, text: qsTr("Deadline"), icon: "sort-deadline" },
                                 { field: 3, text: qsTr("Date created"), icon: "sort-date" }
-                            ]
+                            ])
                             delegate: MenuItem {
                                 required property var modelData
                                 text: modelData.text
@@ -221,7 +222,7 @@ ApplicationWindow {
                     }
                     // step 2: the direction of the chosen mode (A-Z | Z-A, closest | furthest, newest | oldest)
                     Repeater {
-                        model: ctl.sorted ? [false, true] : []
+                        model: ctl.sortHasDirection ? [false, true] : []
                         delegate: NavButton {
                             required property bool modelData
                             // Date created lists "newest first" first: that is its natural direction
