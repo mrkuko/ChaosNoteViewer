@@ -21,7 +21,14 @@ interface StateStore {
 object StateKeys {
     const val UID = "uid"
     const val EMAIL = "email"
+    // the sign-in session (account/RestAuthGateway): the refresh token wrapped by the Android Keystore, and whose it is
     const val REFRESH_TOKEN = "refresh_token"
+    const val SESSION_USER = "session_user"
+    // the user's own Firebase project (account/FirebaseSettings): same key name as on desktop, plus the project id
+    const val API_KEY = "api_key"
+    const val PROJECT_ID = "project_id"
+    // the first-start setup was shown (saved or skipped), the app opens on the notes from then on
+    const val SETUP_SEEN = "setup_seen"
     const val CURSOR_TS = "cursor_ts"
     const val CURSOR_ID = "cursor_id"
     const val SORT_FIELD = "sort_field"

@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaosnoteviewer.account.Account
 import com.chaosnoteviewer.account.AccountState
+import com.chaosnoteviewer.account.FirebaseConfig
 import com.chaosnoteviewer.ui.AccountViewModel
 import com.chaosnoteviewer.ui.SyncViewModel
 import com.chaosnoteviewer.ui.QrCode
@@ -83,11 +84,12 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
-// Settings: the account (sign in, email verification). Encryption key and sync state arrive in phase 5.
+// Settings: reminders and the widget, the Firebase project to sync with, the account and the encryption key.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AccountViewModel, syncVm: SyncViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val config by vm.firebaseConfig.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Settings") }, navigationIcon = { BackButton(onBack) }) },
@@ -97,18 +99,80 @@ fun SettingsScreen(vm: AccountViewModel, syncVm: SyncViewModel, onBack: () -> Un
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ExtrasSection()
-            Text("Account", style = MaterialTheme.typography.titleMedium)
-            when {
-                !vm.configured -> Text(
-                    "Notes are stored on this device. Sign-in is not set up: add google-services.json from your Firebase project to android/app/ and build again.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                state.account is Account.SignedIn -> SignedIn((state.account as Account.SignedIn).email, vm, syncVm)
-                state.account is Account.Pending -> Pending((state.account as Account.Pending).email, state, vm)
-                else -> SignedOut(state, vm)
+            FirebaseSection(vm, signedOut = state.account is Account.SignedOut)
+            if (config != null) {
+                Text("Account", style = MaterialTheme.typography.titleMedium)
+                when (val account = state.account) {
+                    is Account.SignedIn -> SignedIn(account.email, vm, syncVm)
+                    is Account.Pending -> Pending(account.email, state, vm)
+                    else -> SignedOut(state, vm)
+                }
             }
         }
     }
+}
+
+// The user's own Firebase project: entered here (or on first start), changed only while signed out.
+@Composable
+private fun FirebaseSection(vm: AccountViewModel, signedOut: Boolean) {
+    val config by vm.firebaseConfig.collectAsStateWithLifecycle()
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
+    val current = config
+
+    Text("Sync", style = MaterialTheme.typography.titleMedium)
+    when {
+        current != null && current.emulator -> Text(
+            "Debug build: syncs with the local Firebase emulator (${current.projectId}).",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        current == null || editing -> {
+            Text(
+                if (current == null)
+                    "Sync is off: your notes are stored on this device only. To sync them with your other devices, " +
+                        "connect your own Firebase project. Your notes are encrypted before they are uploaded."
+                else
+                    "Changing the project uploads the notes of this device to the new project and sets up the encryption key again.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FirebaseSetupSteps()
+            FirebaseForm(
+                vm = vm,
+                initialKey = current?.apiKey.orEmpty(),
+                initialProject = current?.projectId ?: FirebaseConfig.DEFAULT_PROJECT_ID,
+                saveLabel = "Save",
+                onSaved = { editing = false },
+                onCancel = if (current != null) ({ editing = false }) else null,
+            )
+        }
+        else -> {
+            Text("Firebase project: ${current.projectId}")
+            Text(
+                "Web API key …${current.apiKey.takeLast(4)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (signedOut)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { editing = true }) { Text("Change") }
+                    TextButton(onClick = { confirmRemove = true }) { Text("Turn sync off") }
+                }
+            else
+                Text(
+                    "Sign out to change the project.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+        }
+    }
+    if (confirmRemove)
+        ConfirmDialog(
+            title = "Turn sync off?",
+            text = "The Firebase key is removed from this device. Your notes stay here, and the cloud copy stays in your project.",
+            confirm = "Turn off",
+            onConfirm = { vm.removeFirebase() },
+            onDismiss = { confirmRemove = false },
+        )
 }
 
 @Composable
@@ -200,7 +264,7 @@ private fun SyncSection(vm: SyncViewModel) {
     val backgroundSync by vm.backgroundSync.collectAsStateWithLifecycle()
     var confirmReset by rememberSaveable { mutableStateOf(false) }
 
-    Text("Sync", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+    Text("Encryption and sync status", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
     when (state.phase) {
         KeyPhase.Ready -> {
             Text(

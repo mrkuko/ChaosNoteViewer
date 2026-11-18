@@ -1,4 +1,4 @@
-# Release build (R8): code is shrunk and obfuscated. The libraries (Room, WorkManager, Glance, Firebase, coroutines)
+# Release build (R8): code is shrunk and obfuscated. The libraries (Room, WorkManager, Glance, ML Kit, coroutines)
 # ship their own keep rules; the app itself uses no reflection.
 
 # readable stack traces: keep file names and line numbers, hide the original file name

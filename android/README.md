@@ -1,13 +1,16 @@
 # Chaos Note Viewer for Android
 
 Your notes on Android, local-first: they live in a database on the phone and work without an account or a network.
-Signed in, they are encrypted on the device and synced with the desktop app through Firebase.
+To sync, connect your own Firebase project: the notes are encrypted on the device and synced with your other devices
+through it. Nothing of a Firebase project is built into the app.
 
-Kotlin, Jetpack Compose, Room, WorkManager, Glance (home screen widget), Firebase Auth. Needs Android 9 (API 28) or newer.
+Kotlin, Jetpack Compose, Room, WorkManager, Glance (home screen widget); Firebase Auth and Firestore over their REST APIs.
+Needs Android 9 (API 28) or newer.
 
 ## What it does
 
 - Notes with a deadline, filters (open, completed, all, important), sorting, drag to reorder, links in the text.
+- First start: use the app on this device only, or connect your own Firebase project (also later in Settings).
 - Account with email verification; the notes on a device belong to one account.
 - Encrypted sync (ChaCha20-Poly1305, the same format as the desktop app, see `../core/crypto/`). The key is created on the
   first device and typed in on the others, or scanned from its QR code (desktop app or another phone: Settings, Show key);
@@ -25,10 +28,21 @@ cd android
 ./gradlew installDebug                  # a connected phone or a running emulator
 ```
 
-Without `app/google-services.json` a debug build talks to the local Firebase emulator (`../core/firebase`,
-`npm run emulators`; with a USB phone run `adb reverse tcp:43099 tcp:43099` and `adb reverse tcp:43080 tcp:43080`). With the file, which you
-download from the Firebase console (Project settings, your Android app `com.chaosnoteviewer`), it uses the real project.
-The file is not committed.
+## Your own Firebase project
+
+The app asks for two values of your Firebase project, on first start or in Settings: the **Web API key** and the
+**Project ID** (Firebase console, Project settings, General). Pasting the web app's `firebaseConfig` snippet fills in both.
+The project needs:
+
+1. Authentication, Sign-in method: Email/Password enabled.
+2. A Firestore database with the rules from `../core/firebase/firestore.rules` published.
+
+Use the same project on the desktop app and all your phones. No Android app has to be registered in the project and
+there is no `google-services.json`.
+
+For development, `firebase.emulator=true` in `local.properties` makes a debug build use the local Firebase emulator instead
+(`../core/firebase`, `npm run emulators`; with a USB phone run `adb reverse tcp:43099 tcp:43099` and
+`adb reverse tcp:43080 tcp:43080`).
 
 More about running, debugging and the emulator: `_NOTES.md`.
 
@@ -53,8 +67,7 @@ AAB and attaches them to a GitHub release.
 
 The version name is the tag's version, the version code is `major*10000 + minor*100 + patch`.
 
-The workflow needs these repository secrets: `ANDROID_KEYSTORE` (the release keystore, base64), `ANDROID_KEYSTORE_PASSWORD` and
-`GOOGLE_SERVICES_JSON` (`app/google-services.json`, base64).
+The workflow needs these repository secrets: `ANDROID_KEYSTORE` (the release keystore, base64) and `ANDROID_KEYSTORE_PASSWORD`.
 
 A release build can also be made locally: copy `keystore.properties.example` to `keystore.properties` (ignored by git), fill
 it in and run `./gradlew assembleRelease bundleRelease`. Without it the release APK is built unsigned. The release build is

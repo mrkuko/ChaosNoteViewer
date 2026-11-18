@@ -4,7 +4,10 @@ import android.app.Application
 import com.chaosnoteviewer.account.AccountManager
 import com.chaosnoteviewer.account.AuthException
 import com.chaosnoteviewer.account.AuthGateway
-import com.chaosnoteviewer.account.FirebaseAuthGateway
+import com.chaosnoteviewer.account.FirebaseConfig
+import com.chaosnoteviewer.account.FirebaseSettings
+import com.chaosnoteviewer.account.RestAuthGateway
+import com.chaosnoteviewer.data.StateKeys
 import com.chaosnoteviewer.crypto.AndroidKeystoreWrapper
 import com.chaosnoteviewer.extras.DeadlineWorker
 import com.chaosnoteviewer.extras.Extras
@@ -18,8 +21,6 @@ import kotlinx.coroutines.launch
 import com.chaosnoteviewer.crypto.KeyStorage
 import com.chaosnoteviewer.data.AppDatabase
 import com.chaosnoteviewer.data.NotesRepository
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 import com.chaosnoteviewer.sync.RemoteStore
 import com.chaosnoteviewer.sync.RestFirestore
 import com.chaosnoteviewer.sync.SyncException
@@ -32,7 +33,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeoutOrNull
-import com.google.firebase.auth.FirebaseAuth
 
 // Holds the app-wide objects (no DI framework, the app is small).
 class ChaosApp : Application() {
@@ -55,7 +55,8 @@ class ChaosApp : Application() {
 
         // The account and the sync live here, not in a screen: a background job must find them as well.
         appScope.launch {
-            account.restore()                         // the sign-in the Firebase SDK remembers
+            firebase.load()                           // the user's own Firebase project, if they entered one
+            account.restore()                         // the remembered sign-in
             restored.complete(Unit)
         }
         appScope.launch {
@@ -85,16 +86,34 @@ class ChaosApp : Application() {
     val database by lazy { AppDatabase.open(this) }
     val notes by lazy { NotesRepository(database) }
 
-    // null = this build has no Firebase (no google-services.json and not a debug build for the emulator)
-    private val authGateway: AuthGateway? by lazy { createAuth() }
-    val account by lazy { AccountManager(notes, authGateway) }
+    // The user's own Firebase project (entered on first start or in Settings); a debug build for the local emulator
+    // (firebase.emulator=true in local.properties) has the emulator's built in instead.
+    val firebase by lazy {
+        FirebaseSettings(
+            notes,
+            fixed = if (BuildConfig.FIREBASE_EMULATOR) FirebaseConfig.EMULATOR else null,
+            // another project: its cloud copy is new, so everything is uploaded again and the key is set up again
+            onProjectChanged = {
+                notes.forgetRemote()
+                notes.clearState(StateKeys.ENC_KEY)
+                notes.clearState(StateKeys.KEY_CONFIRMED)
+            },
+        )
+    }
 
-    // the cloud copy of the signed-in account (Firestore over REST), null without Firebase
-    private val remote: RemoteStore? by lazy {
-        val gateway = authGateway ?: return@lazy null
+    // the session is saved one write after another, off the main thread
+    private val authWrites = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private val authGateway: AuthGateway by lazy {
+        RestAuthGateway(config = { firebase.current }, store = notes, wrapper = AndroidKeystoreWrapper("chaosnoteviewer_session_wrap"), writes = authWrites)
+    }
+    val account by lazy { AccountManager(notes, authGateway, configured = { firebase.current != null }) }
+
+    // the cloud copy of the signed-in account (Firestore over REST), in the project the user entered
+    private val remote: RemoteStore by lazy {
+        val gateway = authGateway
         RestFirestore(
-            baseUrl = if (BuildConfig.FIREBASE_EMULATOR) "http://$EMULATOR_HOST:$EMULATOR_FIRESTORE_PORT/v1" else "https://firestore.googleapis.com/v1",
-            projectId = FirebaseApp.getInstance().options.projectId ?: "demo-chaosnoteviewer",
+            baseUrl = { firebase.current?.firestoreUrl ?: "https://firestore.googleapis.com/v1" },
+            projectId = { firebase.current?.projectId.orEmpty() },
             token = { refresh ->
                 try {
                     gateway.idToken(refresh)
@@ -109,32 +128,4 @@ class ChaosApp : Application() {
         SyncManager(notes, remote, KeyStorage(notes, AndroidKeystoreWrapper()), onSessionLost = { account.sessionEnded() })
     }
     val scheduler by lazy { SyncScheduler(this, appScope, notes, sync) }
-
-    private fun createAuth(): AuthGateway? {
-        // with google-services.json the Firebase plugin already initialized the real project
-        if (FirebaseApp.getApps(this).isEmpty()) {
-            if (!BuildConfig.FIREBASE_EMULATOR)
-                return null
-            // no real project: the emulator accepts any key, the id matches `npm run emulators` in core/firebase
-            FirebaseApp.initializeApp(
-                this,
-                FirebaseOptions.Builder()
-                    .setApiKey("demo-key")
-                    .setApplicationId("1:0:android:0000000000000000")
-                    .setProjectId("demo-chaosnoteviewer")
-                    .build(),
-            )
-        }
-        val auth = FirebaseAuth.getInstance()
-        if (BuildConfig.FIREBASE_EMULATOR)
-            auth.useEmulator(EMULATOR_HOST, EMULATOR_AUTH_PORT)
-        return FirebaseAuthGateway(auth)
-    }
-
-    companion object {
-        // the PC's emulator through `adb reverse tcp:43099 tcp:43099` (ports from core/firebase/firebase.json)
-        const val EMULATOR_HOST = "localhost"
-        const val EMULATOR_AUTH_PORT = 43099
-        const val EMULATOR_FIRESTORE_PORT = 43080
-    }
 }

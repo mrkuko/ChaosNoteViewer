@@ -31,20 +31,24 @@ data class AccountState(
 // The app is local-first and works without an account; signing in is only needed to sync.
 // Rules as in the desktop AppController: a database belongs to one account for good, so signing in as somebody
 // else is refused; the first account to sign in claims the notes written before; a verified email is required.
-// [auth] is null when this build has no Firebase configuration: there is nothing to sign in to.
-class AccountManager(private val store: AccountStore, private val auth: AuthGateway?) {
-    val configured: Boolean get() = auth != null
+// [configured]: whether the user entered a Firebase project; without one there is nothing to sign in to.
+class AccountManager(
+    private val store: AccountStore,
+    private val auth: AuthGateway?,
+    private val configured: () -> Boolean = { auth != null },
+) {
 
     private val _state = MutableStateFlow(AccountState())
     val state: StateFlow<AccountState> = _state.asStateFlow()
 
     private fun sameEmail(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
 
-    // Called at app start: picks up the session the Firebase SDK remembers. Offline keeps the session,
-    // only a revoked one ends it. A user that is not verified yet goes (back) to waiting for it.
+    // Called at app start and when a Firebase project is entered: picks up the remembered session. Offline keeps
+    // the session, only a revoked one ends it. A user that is not verified yet goes (back) to waiting for it.
     suspend fun restore() {
         val gateway = auth ?: return
-        val cached = gateway.currentUser ?: return
+        if (!configured() || _state.value.account != Account.SignedOut) return
+        val cached = gateway.remembered() ?: return
         val user = try {
             gateway.reload() ?: return
         } catch (e: AuthException) {
@@ -59,6 +63,7 @@ class AccountManager(private val store: AccountStore, private val auth: AuthGate
 
     suspend fun authenticate(create: Boolean, email: String, password: String) {
         val gateway = auth ?: return
+        if (!configured()) return fail("NOT_CONFIGURED")
         val mail = email.trim()
         if (mail.isEmpty()) return fail("MISSING_EMAIL")
         if (password.isEmpty()) return fail("MISSING_PASSWORD")

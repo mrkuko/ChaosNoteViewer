@@ -30,7 +30,7 @@ private class FakeAuth : AuthGateway {
 
     private fun user(email: String) = accounts[email]!!.let { AuthUser(it.uid, email, it.verified) }
 
-    override val currentUser get() = signedIn?.let { user(it) }
+    override suspend fun remembered() = signedIn?.let { user(it) }
 
     override suspend fun signUp(email: String, password: String): AuthUser {
         if (offline) throw AuthException("NETWORK")
@@ -76,9 +76,24 @@ class AccountManagerTest {
 
     @Test fun notConfiguredDoesNothing() = runTest {
         val m = AccountManager(store, null)
-        assertFalse(m.configured)
         m.authenticate(false, "a@b.c", "secret1")
         assertEquals(Account.SignedOut, m.state.value.account)
+    }
+
+    // no Firebase project entered yet: nothing to sign in to, and a remembered session waits for the project
+    @Test fun withoutAProjectSignInAsksForItAndRestoreWaits() = runTest {
+        var configured = false
+        val m = AccountManager(store, auth, configured = { configured })
+        existing("a@b.c")
+        m.authenticate(false, "a@b.c", "secret1")
+        assertEquals(Account.SignedOut, m.state.value.account)
+        assertEquals(AuthErrors.text("NOT_CONFIGURED"), m.state.value.error)
+        auth.signedIn = "a@b.c"
+        m.restore()
+        assertEquals(Account.SignedOut, m.state.value.account)
+        configured = true
+        m.restore()
+        assertEquals(Account.SignedIn("a@b.c"), m.state.value.account)
     }
 
     @Test fun signInVerifiedBindsTheDatabaseAndClaimsNotes() = runTest {

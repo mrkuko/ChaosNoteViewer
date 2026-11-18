@@ -14,6 +14,9 @@ import com.chaosnoteviewer.ui.screens.DetailScreen
 import com.chaosnoteviewer.ui.screens.EditScreen
 import com.chaosnoteviewer.ui.screens.NotesListScreen
 import com.chaosnoteviewer.ui.screens.SettingsScreen
+import com.chaosnoteviewer.ui.screens.SetupScreen
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // Routes of the app. A note is identified by its UUID string (notes.id).
 object Routes {
@@ -22,6 +25,7 @@ object Routes {
     const val EDIT = "edit?id={id}&due={due}"   // no id = new note; due = preset deadline (local midnight millis)
     const val SETTINGS = "settings"
     const val CALENDAR = "calendar"
+    const val SETUP = "setup"
 
     fun detail(id: String) = "detail/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -36,6 +40,12 @@ fun AppNavigation(launch: LaunchRequest = LaunchRequest(), onLaunchHandled: () -
     // created here, so the remembered sign-in is picked up as soon as the app starts
     val accountVm: AccountViewModel = viewModel(factory = AccountViewModel.Factory)
     val syncVm: SyncViewModel = viewModel(factory = SyncViewModel.Factory)
+
+    // first start: the welcome screen with the choice between this device only and the user's own Firebase project
+    val setupSeen by accountVm.setupSeen.collectAsStateWithLifecycle()
+    LaunchedEffect(setupSeen) {
+        if (setupSeen == false) nav.navigate(Routes.SETUP)
+    }
 
     // opened from the widget or a notification: go to the note, the new note form or the list
     LaunchedEffect(launch) {
@@ -91,6 +101,14 @@ fun AppNavigation(launch: LaunchRequest = LaunchRequest(), onLaunchHandled: () -
                 onOpenNote = { nav.navigate(Routes.detail(it)) },
                 onEditNote = { nav.navigate(Routes.edit(it)) },
                 onNewNote = { nav.navigate(Routes.newDueOn(it)) },
+            )
+        }
+        composable(Routes.SETUP) {
+            SetupScreen(
+                vm = accountVm,
+                onLocalOnly = { nav.popBackStack(Routes.LIST, inclusive = false) },
+                // saved: on to Settings, where the account is signed in or created
+                onConfigured = { nav.navigate(Routes.SETTINGS) { popUpTo(Routes.LIST) } },
             )
         }
         composable(Routes.SETTINGS) {

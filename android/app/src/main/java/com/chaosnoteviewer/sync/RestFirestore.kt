@@ -17,13 +17,17 @@ import java.time.Instant
 //   users/{uid}/notes/{noteId}   content: "v1.<encrypted JSON of the note>", serverUpdatedAt
 //   users/{uid}/meta/keycheck    check: a known text encrypted with the key
 //
-// [baseUrl]: https://firestore.googleapis.com/v1, or http://localhost:43080/v1 for the local emulator.
+// [baseUrl]: https://firestore.googleapis.com/v1, or http://localhost:43080/v1 for the local emulator. Both it and
+// [projectId] are read at every call: the user can enter or change their Firebase project while the app runs.
 // [token] gives the Firebase id token; with forceRefresh = true a new one (the old one expired).
 class RestFirestore(
-    private val baseUrl: String,
-    private val projectId: String,
+    private val baseUrl: () -> String,
+    private val projectId: () -> String,
     private val token: suspend (forceRefresh: Boolean) -> String,
 ) : RemoteStore {
+    constructor(baseUrl: String, projectId: String, token: suspend (forceRefresh: Boolean) -> String) :
+        this({ baseUrl }, { projectId }, token)
+
     companion object {
         const val LIST_PAGE = 1000
         const val DELETE_BATCH = 400
@@ -31,7 +35,7 @@ class RestFirestore(
         private const val TIMEOUT_MS = 20_000
     }
 
-    private val db = "projects/$projectId/databases/(default)/documents"
+    private val db get() = "projects/${projectId()}/databases/(default)/documents"
     private fun root(uid: String) = "$db/users/$uid"
     private fun noteName(uid: String, id: String) = "${root(uid)}/notes/$id"
     private fun checkName(uid: String) = "${root(uid)}/meta/keycheck"
@@ -50,7 +54,7 @@ class RestFirestore(
 
     private suspend fun send(method: String, path: String, body: JSONObject?, bearer: String): Any =
         withContext(Dispatchers.IO) {
-            val conn = URL("$baseUrl/$path").openConnection() as HttpURLConnection
+            val conn = URL("${baseUrl()}/$path").openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = method
                 conn.connectTimeout = TIMEOUT_MS

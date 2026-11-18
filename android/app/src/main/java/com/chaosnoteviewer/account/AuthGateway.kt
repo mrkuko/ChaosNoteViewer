@@ -1,6 +1,6 @@
 package com.chaosnoteviewer.account
 
-// What the account rules need from Firebase Auth. The real thing is FirebaseAuthGateway; tests use a fake.
+// What the account rules need from Firebase Auth. The real thing is RestAuthGateway; tests use a fake.
 
 data class AuthUser(val uid: String, val email: String, val verified: Boolean)
 
@@ -9,8 +9,8 @@ data class AuthUser(val uid: String, val email: String, val verified: Boolean)
 class AuthException(val code: String, val sessionLost: Boolean = false) : Exception(AuthErrors.text(code))
 
 interface AuthGateway {
-    // the signed-in user the SDK remembers from the last run, null = nobody. Not verified yet means "pending".
-    val currentUser: AuthUser?
+    // the signed-in user remembered from the last run, null = nobody. Not verified yet means "pending".
+    suspend fun remembered(): AuthUser?
 
     suspend fun signUp(email: String, password: String): AuthUser
     suspend fun signIn(email: String, password: String): AuthUser
@@ -42,6 +42,11 @@ object AuthErrors {
         "RESET_EMAIL_NOT_FOUND" -> "No account with this email."
         "NOT_VERIFIED" -> "The email is not verified yet. Open the link in the email first."
         "NETWORK" -> "Could not reach Firebase. Check your connection."
+        "NOT_CONFIGURED" -> "Sync is not set up. Enter your Firebase project first."
+        "INVALID_API_KEY" -> "Firebase does not accept this API key. Check the Web API key of your project."
+        "API_KEY_BLOCKED" -> "This API key is not allowed to sign in. Check its restrictions in the Google Cloud console (Identity Toolkit and Token Service APIs)."
+        "CONFIGURATION_NOT_FOUND" -> "Authentication is not set up in this Firebase project. Enable Email/Password sign-in in the Firebase console."
+        "EMAIL_NOT_FOUND", "INVALID_PASSWORD" -> "Wrong email or password."
         else -> "Sign-in failed ($code)."
     }
 }

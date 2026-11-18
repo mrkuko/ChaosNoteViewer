@@ -8,7 +8,7 @@ name: Release Android
 # Secrets (Settings > Secrets and variables > Actions), see android/README.md:
 #   ANDROID_KEYSTORE           the release keystore, base64
 #   ANDROID_KEYSTORE_PASSWORD  its password (ASCII only)
-#   GOOGLE_SERVICES_JSON       android/app/google-services.json from the Firebase console, base64
+# No Firebase configuration is built in: every user enters their own project in the app.
 on:
   push:
     tags: ['android-v*']
@@ -49,15 +49,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Firebase configuration and signing key from secrets
+      - name: Signing key from secrets
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
         run: |
-          for name in GOOGLE_SERVICES_JSON ANDROID_KEYSTORE; do
-            if [ -z "${!name}" ]; then echo "::error::The secret $name is missing."; exit 1; fi
-          done
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+          if [ -z "$ANDROID_KEYSTORE" ]; then echo "::error::The secret ANDROID_KEYSTORE is missing."; exit 1; fi
           echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 

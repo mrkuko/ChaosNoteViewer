@@ -7,9 +7,9 @@ plugins {
     alias(libs.plugins.room)
 }
 
-// Firebase: with app/google-services.json (from the Firebase console, not committed) the app talks to the
-// real project. Without it, or with firebase.emulator=true in local.properties, a debug build talks to the local
-// emulator (core/firebase, `npm run emulators`; USB phone: `adb reverse tcp:43099 tcp:43099`).
+// Firebase: nothing is built in. Every user enters their own project (Web API key + project id) in the app, on first
+// start or in Settings. With firebase.emulator=true in local.properties a debug build talks to the local emulator
+// instead (core/firebase, `npm run emulators`; USB phone: `adb reverse tcp:43099 tcp:43099` and the same for 43080).
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -25,9 +25,6 @@ fun signingValue(property: String, env: String): String? = keystoreProps.getProp
 val appVersionName = (findProperty("versionName") as String?) ?: "0.1.0"
 val appVersionCode = (findProperty("versionCode") as String?)?.toInt()
     ?: appVersionName.split(".").map { it.toInt() }.let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
-
-if (file("google-services.json").exists())
-    pluginManager.apply("com.google.gms.google-services")
 
 android {
     namespace = "com.chaosnoteviewer"
@@ -56,7 +53,7 @@ android {
 
     buildTypes {
         debug {
-            val emulator = localProps.getProperty("firebase.emulator") == "true" || !file("google-services.json").exists()
+            val emulator = localProps.getProperty("firebase.emulator") == "true"
             buildConfigField("boolean", "FIREBASE_EMULATOR", emulator.toString())
         }
         release {
@@ -114,9 +111,6 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
     implementation(libs.androidx.work.runtime)
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.code.scanner)     // scanning the key's QR code, no camera permission
     ksp(libs.androidx.room.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
