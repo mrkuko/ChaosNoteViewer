@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="chaosnoteviewer.png" alt="Chaos Note Viewer" width="160">
+  <img src="docs/images/banner.jpg" alt="Chaos Note Viewer: notes with deadlines on your desktop and phone" width="100%">
 </p>
-
-<h1 align="center">Chaos Note Viewer</h1>
 
 <p align="center">
   Notes with deadlines on your desktop and your phone. Local-first, works offline,<br>
@@ -10,58 +8,98 @@
 </p>
 
 <p align="center">
+  <a href="../../releases"><img src="https://img.shields.io/github/v/release/mrkuko/ChaosNoteViewer?include_prereleases&label=android&color=14a3a6" alt="Latest Android release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-14a3a6" alt="License: GPL-3.0-or-later"></a>
+  <img src="https://img.shields.io/badge/platforms-Android%20%C2%B7%20KDE%20Plasma%20%C2%B7%20Linux%20%C2%B7%20Windows-0f6f73" alt="Platforms">
+</p>
+
+<p align="center">
   <img src="docs/images/android/list.png" alt="Open notes" width="240">
   &nbsp;
-  <img src="docs/images/android/detail.png" alt="A note" width="240">
+  <img src="docs/images/android/calendar-month.png" alt="Calendar of deadlines" width="240">
   &nbsp;
-  <img src="docs/images/android/widget.png" alt="Home screen widget" width="240">
+  <img src="docs/images/android/important.png" alt="Important notes, overdue below a divider" width="240">
 </p>
 
 ## Features
 
+**Notes**
+
 - **Notes with deadlines.** A title, a description with clickable links, and an optional deadline. Overdue notes stand
-  out, notes due within three days land in *Important*.
+  out in red.
+- **Swipe to complete.** Pull a note to the left to mark it as done. The row stays in place for a few seconds with an
+  **Undo**, so nothing disappears by accident. A tap only ever opens the note.
+- **Stars.** Star the notes that matter. Stars sync between your devices, and the *Starred first* switch puts them on
+  top of whatever order you chose.
 - **Your order or sorted.** Drag notes into your own order, or sort them by name, deadline or creation date.
+
+**Staying on top of deadlines**
+
+- **Important.** Notes that are overdue or due within three days. Upcoming ones come first with the closest deadline on
+  top. Overdue ones follow below a red *Overdue* divider. This view remembers its own sort.
+- **Calendar.** A month or week view with a dot for every deadline. Pick a day to see what is due, complete it with
+  a swipe, or press **+** to add a note due on that day.
+- **Reminders** (Android). Every morning around 8:00, one notification for each note due today or overdue, with a
+  **Done** button. No permanent "you have N notes" nagging.
 - **Filters.** Open, completed, all and important notes, each with its count.
+
+**Your data**
+
 - **Local-first.** Notes live in a database on the device. No account and no network needed.
 - **Encrypted sync.** Sign in to sync between the desktop and the phone. Notes are encrypted on the device with
   ChaCha20-Poly1305 before they leave it. The key exists only on your devices: the cloud stores ciphertext and never
   the key.
 - **Sync that keeps up.** Changes go out a couple of seconds after you make them, the open app pulls every 30 seconds,
   and on Android a background job syncs about every 15 minutes and as soon as the network is back.
-- **Home screen widget** (Android) with your open notes and checkboxes to complete them.
-- **Daily reminder** (Android) of notes due today or overdue, and the number of open notes on the app icon.
-- **KDE Plasma widget and a tray app** for Linux and Windows.
+
+**Everywhere**
+
+- **Android app** with a home screen widget of your open notes.
+- **KDE Plasma widget** and a **tray app** for Linux and Windows that pops up above the tray icon.
 
 ## Screenshots
-
-### Desktop
-
-A tray app for Linux and Windows that pops up above the tray icon, and the same notes as a KDE Plasma widget.
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/images/desktop/list.png" alt="Open notes" width="360"><br>Open notes</td>
-    <td align="center"><img src="docs/images/desktop/edit.png" alt="Editing a note" width="360"><br>Editing with a deadline</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/images/desktop/detail.png" alt="A note" width="360"><br>A note with links</td>
-    <td align="center"><img src="docs/images/desktop/sort.png" alt="Sorting" width="360"><br>Important notes, sorting</td>
-  </tr>
-</table>
 
 ### Android
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/android/filters.png" alt="Filters" width="240"><br>Filters with counts</td>
-    <td align="center"><img src="docs/images/android/sort.png" alt="Sorting" width="240"><br>Important notes, sorting</td>
-    <td align="center"><img src="docs/images/android/deadline.png" alt="Deadline" width="240"><br>Picking a deadline</td>
+    <td align="center"><img src="docs/images/android/swipe.png" alt="Swipe to complete" width="240"><br>Swipe left to complete</td>
+    <td align="center"><img src="docs/images/android/undo.png" alt="Undo after a swipe" width="240"><br>Undo, right where the note was</td>
+    <td align="center"><img src="docs/images/android/starred-first.png" alt="Starred first" width="240"><br>Starred notes first</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/images/android/settings.png" alt="Settings" width="240"><br>Reminders, widget, account</td>
+    <td align="center"><img src="docs/images/android/calendar-week.png" alt="Week view" width="240"><br>Calendar, week view</td>
+    <td align="center"><img src="docs/images/android/calendar-swipe.png" alt="Completing from the calendar" width="240"><br>Complete from the calendar</td>
+    <td align="center"><img src="docs/images/android/calendar-new-note.png" alt="New note due on the picked day" width="240"><br>New note on the picked day</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/android/drawer.png" alt="Navigation" width="240"><br>Filters with counts, calendar</td>
+    <td align="center"><img src="docs/images/android/important-sort.png" alt="Sorting in Important" width="240"><br>Sorting, per view</td>
+    <td align="center"><img src="docs/images/android/deadline.png" alt="Picking a deadline" width="240"><br>Picking a deadline</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/android/widget.png" alt="Home screen widget" width="240"><br>Home screen widget</td>
     <td align="center"><img src="docs/images/android/key.png" alt="Encryption key" width="240"><br>Your encryption key</td>
     <td align="center"><img src="docs/images/android/sync.png" alt="Sync" width="240"><br>Sync status</td>
+  </tr>
+</table>
+
+### Desktop
+
+The tray app and the Plasma widget share one interface.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/desktop/important.png" alt="Important notes" width="360"><br>Important: upcoming, then overdue</td>
+    <td align="center"><img src="docs/images/desktop/calendar-month.png" alt="Calendar, month view" width="360"><br>Calendar of deadlines</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/desktop/edit.png" alt="Editing a note" width="360"><br>Editing with a deadline</td>
+    <td align="center"><img src="docs/images/desktop/calendar-week.png" alt="Calendar, week view" width="360"><br>Week view</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/desktop/confirm-delete.png" alt="Confirm before deleting" width="360"><br>Nothing is deleted without asking</td>
+    <td align="center"><img src="docs/images/desktop/settings.png" alt="Settings" width="360"><br>Settings, works without an account</td>
   </tr>
 </table>
 
@@ -90,6 +128,11 @@ automatically.
 - [core/storage/migrations/](core/storage/migrations/): the local database schema
 - [core/crypto/](core/crypto/): the encryption format and test vectors
 - [core/assets/](core/assets/): the logo and icons
+
+## Contributing
+
+Bug reports and ideas are welcome in [issues](../../issues). For a pull request, open an issue first so we can agree
+on the change. Contributions are accepted under the project's license.
 
 ## License
 
