@@ -1,4 +1,5 @@
 name: Release Android
+run-name: Release ${{ github.ref_name }}
 
 # Push a tag like android-v0.1.0 (on the android branch) to build the signed APK and AAB and attach them to a GitHub
 # release.
@@ -56,6 +57,10 @@ jobs:
           if [ -z "$ANDROID_KEYSTORE" ]; then echo "::error::The secret ANDROID_KEYSTORE is missing."; exit 1; fi
           echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      # the working copy where the commits are made does not keep the executable bit (core.fileMode=false)
+      - name: Make the Gradle wrapper executable
+        run: chmod +x android/gradlew
 
       - name: Unit tests
         working-directory: android
