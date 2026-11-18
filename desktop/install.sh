@@ -25,4 +25,4 @@ if kpackagetool6 -t Plasma/Applet -l 2>/dev/null | grep -q "org.kde.plasma.chaos
 else
     kpackagetool6 -t Plasma/Applet -i plasmoid
 fi
-echo "Done. If the widget did not refresh: plasmashell --replace &"
+echo "Done. If the widget did not refresh: systemctl --user restart plasma-plasmashell.service"

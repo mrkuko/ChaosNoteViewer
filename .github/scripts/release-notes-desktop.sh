@@ -89,7 +89,7 @@ It needs FUSE 2 (\`libfuse2\`); without it, run it with \`--appimage-extract-and
 
 Then find **Chaos Note Viewer** in Add or Manage Widgets and drag it onto a panel or the desktop.
 To update an installed widget: \`kpackagetool6 -t Plasma/Applet -u $PLA\`, then log out and in again (or run
-\`plasmashell --replace &\`). To remove it: \`kpackagetool6 -t Plasma/Applet -r org.kde.plasma.chaosnoteviewer\`.
+\`systemctl --user restart plasma-plasmashell.service\`). To remove it: \`kpackagetool6 -t Plasma/Applet -r org.kde.plasma.chaosnoteviewer\`.
 
 ## What's new
 
