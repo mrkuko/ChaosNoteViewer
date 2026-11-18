@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaosnoteviewer.account.Account
 import com.chaosnoteviewer.account.AccountState
 import com.chaosnoteviewer.account.FirebaseConfig
+import com.chaosnoteviewer.sync.SetupCode
 import com.chaosnoteviewer.ui.AccountViewModel
 import com.chaosnoteviewer.ui.SyncViewModel
 import com.chaosnoteviewer.ui.QrCode
@@ -103,7 +104,7 @@ fun SettingsScreen(vm: AccountViewModel, syncVm: SyncViewModel, onBack: () -> Un
             if (config != null) {
                 Text("Account", style = MaterialTheme.typography.titleMedium)
                 when (val account = state.account) {
-                    is Account.SignedIn -> SignedIn(account.email, vm, syncVm)
+                    is Account.SignedIn -> SignedIn(account.email, vm, syncVm, config)
                     is Account.Pending -> Pending(account.email, state, vm)
                     else -> SignedOut(state, vm)
                 }
@@ -135,7 +136,6 @@ private fun FirebaseSection(vm: AccountViewModel, signedOut: Boolean) {
                     "Changing the project uploads the notes of this device to the new project and sets up the encryption key again.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            FirebaseSetupSteps()
             FirebaseForm(
                 vm = vm,
                 initialKey = current?.apiKey.orEmpty(),
@@ -176,10 +176,10 @@ private fun FirebaseSection(vm: AccountViewModel, signedOut: Boolean) {
 }
 
 @Composable
-private fun SignedIn(email: String, vm: AccountViewModel, syncVm: SyncViewModel) {
+private fun SignedIn(email: String, vm: AccountViewModel, syncVm: SyncViewModel, config: FirebaseConfig?) {
     Text("Signed in as $email")
     OutlinedButton(onClick = vm::signOut) { Text("Sign out") }
-    SyncSection(syncVm)
+    SyncSection(syncVm, config)
 }
 
 // signed in at Firebase, the email link was not opened yet
@@ -259,7 +259,7 @@ private fun Busy(state: AccountState) {
 // ---- sync and the encryption key ----
 
 @Composable
-private fun SyncSection(vm: SyncViewModel) {
+private fun SyncSection(vm: SyncViewModel, config: FirebaseConfig?) {
     val state by vm.state.collectAsStateWithLifecycle()
     val backgroundSync by vm.backgroundSync.collectAsStateWithLifecycle()
     var confirmReset by rememberSaveable { mutableStateOf(false) }
@@ -287,7 +287,7 @@ private fun SyncSection(vm: SyncViewModel) {
                 checked = backgroundSync,
                 onChange = vm::setBackgroundSync,
             )
-            KeyBlock(state.keyBlock)
+            KeyBlock(state.keyBlock, config)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = vm::toggleKeyShown) { Text(if (state.keyBlock.isEmpty()) "Show encryption key" else "Hide key") }
                 TextButton(onClick = { confirmReset = true }) { Text("Lost the key?") }
@@ -301,7 +301,7 @@ private fun SyncSection(vm: SyncViewModel) {
                     "another device. Syncing starts when you confirm.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            KeyBlock(state.keyBlock)
+            KeyBlock(state.keyBlock, config)
             Button(onClick = vm::confirmKey, enabled = state.keyBlock.isNotEmpty()) { Text("I saved the key") }
         }
         KeyPhase.Enter -> {
@@ -336,7 +336,7 @@ private fun SyncSection(vm: SyncViewModel) {
                     onClick = {
                         scanError = ""
                         // the scanned text goes the same way as typed text, so a foreign QR gets the usual key error
-                        scanKey(context, onText = { typed = it; vm.submitKey(it) }, onError = { scanError = it })
+                        scanQr(context, onText = { typed = SetupCode.keyOf(it); vm.submitKey(it) }, onError = { scanError = it })
                     },
                     enabled = !state.keyBusy,
                 ) { Text("Scan QR code") }
@@ -374,8 +374,11 @@ private fun SyncSection(vm: SyncViewModel) {
 
 // the key as four lines, copyable as one, and as a QR code for another phone
 @Composable
-private fun KeyBlock(block: String) {
+private fun KeyBlock(block: String, config: FirebaseConfig?) {
     if (block.isEmpty()) return
+    val keyLine = block.lines().joinToString("-")
+    // the whole setup for another device: the Firebase project and the key (the emulator's demo project has no real key)
+    val setup = if (config == null || config.emulator) "" else SetupCode.make(config.projectId, config.apiKey, keyLine)
     val context = LocalContext.current
     // no screenshots or recent-apps preview while the key is on screen
     DisposableEffect(Unit) {
@@ -389,12 +392,22 @@ private fun KeyBlock(block: String) {
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     )
-    // the same content as the desktop's QR: the key on one line
-    KeyQr(block.lines().joinToString("-"))
-    OutlinedButton(onClick = {
-        val clipboard = context.getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("Encryption key", block.lines().joinToString("-")))
-    }) { Text("Copy key") }
+    // the same content as the desktop's QR: the setup code, or the bare key without a project
+    KeyQr(setup.ifEmpty { keyLine })
+    if (setup.isNotEmpty())
+        Text(
+            "Scan it with the app on your other phone to set it up at once: the Firebase project and this key. " +
+                "You still sign in there with your password.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    fun copy(label: String, text: String) =
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, text))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { copy("Encryption key", keyLine) }) { Text("Copy key") }
+        if (setup.isNotEmpty())
+            OutlinedButton(onClick = { copy("Setup code", setup) }) { Text("Copy setup code") }
+    }
 }
 
 // black on white with the 4-module quiet zone in both themes, so a camera reads it
@@ -414,11 +427,11 @@ private fun KeyQr(text: String) {
 
 // Google's code scanner: it draws the camera screen itself, the app needs no camera permission. The scanner
 // module is downloaded by Play services on first use.
-private fun scanKey(context: Context, onText: (String) -> Unit, onError: (String) -> Unit) {
+internal fun scanQr(context: Context, onText: (String) -> Unit, onError: (String) -> Unit) {
     val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
     GmsBarcodeScanning.getClient(context, options).startScan()
         .addOnSuccessListener { barcode -> barcode.rawValue?.let(onText) }
-        .addOnFailureListener { onError("Could not start the QR scanner (it needs Google Play services). Type the key instead.") }
+        .addOnFailureListener { onError("Could not start the QR scanner (it needs Google Play services). Type the values instead.") }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

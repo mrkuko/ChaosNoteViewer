@@ -124,8 +124,10 @@ class ChaosApp : Application() {
             },
         )
     }
+    // the encryption key of the cloud copy (also filled in from a scanned setup code before the sign-in)
+    val keyStorage by lazy { KeyStorage(notes, AndroidKeystoreWrapper()) }
     val sync by lazy {
-        SyncManager(notes, remote, KeyStorage(notes, AndroidKeystoreWrapper()), onSessionLost = { account.sessionEnded() })
+        SyncManager(notes, remote, keyStorage, onSessionLost = { account.sessionEnded() })
     }
     val scheduler by lazy { SyncScheduler(this, appScope, notes, sync) }
 }

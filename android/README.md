@@ -13,7 +13,8 @@ Needs Android 9 (API 28) or newer.
 - First start: use the app on this device only, or connect your own Firebase project (also later in Settings).
 - Account with email verification; the notes on a device belong to one account.
 - Encrypted sync (ChaCha20-Poly1305, the same format as the desktop app, see `../core/crypto/`). The key is created on the
-  first device and typed in on the others, or scanned from its QR code (desktop app or another phone: Settings, Show key);
+  first device and typed in on the others, or scanned from its QR code (desktop app or another phone: Settings, Show key),
+  which brings the Firebase project along;
   it is never stored in the cloud. Scanning uses Google's code scanner, so the app needs no camera permission.
 - Sync soon after a change, every 30 s while the app is open, about every 15 minutes while it is closed, and as soon as the
   network is back after changes made offline.
@@ -37,7 +38,10 @@ The project needs:
 1. Authentication, Sign-in method: Email/Password enabled.
 2. A Firestore database with the rules from `../core/firebase/firestore.rules` published.
 
-Use the same project on the desktop app and all your phones. No Android app has to be registered in the project and
+Use the same project on the desktop app and all your phones. The quickest way to add a device: on one that already
+syncs, Settings, Show key shows a QR code with the whole setup (the project and the encryption key,
+`chaosnote:setup?v=1&p=<project id>&a=<api key>&k=<key>`, the same format as on desktop). Scan it on the new phone's
+first start or in Settings, then sign in; the sign-in is never part of the code. No Android app has to be registered in the project and
 there is no `google-services.json`.
 
 For development, `firebase.emulator=true` in `local.properties` makes a debug build use the local Firebase emulator instead

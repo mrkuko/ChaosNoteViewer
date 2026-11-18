@@ -9,9 +9,16 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chaosnoteviewer.ChaosApp
 import com.chaosnoteviewer.account.AccountManager
 import com.chaosnoteviewer.account.FirebaseSettings
+import com.chaosnoteviewer.crypto.KeyStorage
+import com.chaosnoteviewer.crypto.KeyText
+import com.chaosnoteviewer.sync.SetupCode
 import kotlinx.coroutines.launch
 
-class AccountViewModel(private val manager: AccountManager, private val firebase: FirebaseSettings) : ViewModel() {
+class AccountViewModel(
+    private val manager: AccountManager,
+    private val firebase: FirebaseSettings,
+    private val keys: KeyStorage? = null,
+) : ViewModel() {
     val state = manager.state
 
     // the user's Firebase project (null = sync not set up) and whether the first-start setup was shown
@@ -24,6 +31,25 @@ class AccountViewModel(private val manager: AccountManager, private val firebase
     // project (it was removed and entered again) comes back at once.
     fun saveFirebase(apiKey: String, projectId: String, onDone: (String?) -> Unit) = viewModelScope.launch {
         val problem = firebase.save(apiKey, projectId)
+        onDone(problem)
+        if (problem == null) manager.restore()
+    }
+
+    // A setup code from another device (its QR code, or the copied text): the Firebase project and the encryption key
+    // at once. The key waits until the sign-in, then it is checked against the cloud copy like a typed one.
+    // [onDone] gets what is wrong, or null when it was applied.
+    fun applySetupCode(text: String, onDone: (String?) -> Unit) = viewModelScope.launch {
+        val code = SetupCode.parse(text)
+        if (code == null) {
+            onDone(
+                if (KeyText.parse(text) != null)
+                    "This QR code holds only the encryption key. Show the key on a device with the current version of the app, its code brings the Firebase project too."
+                else "This is not a setup code of Chaos Note Viewer."
+            )
+            return@launch
+        }
+        val problem = firebase.save(code.apiKey, code.projectId)
+        if (problem == null) keys?.save(code.key, confirmed = true)
         onDone(problem)
         if (problem == null) manager.restore()
     }
@@ -44,7 +70,7 @@ class AccountViewModel(private val manager: AccountManager, private val firebase
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ChaosApp
-                AccountViewModel(app.account, app.firebase)
+                AccountViewModel(app.account, app.firebase, app.keyStorage)
             }
         }
     }

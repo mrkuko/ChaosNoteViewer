@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chaosnoteviewer.R
 import com.chaosnoteviewer.account.FirebaseConfig
 import com.chaosnoteviewer.ui.AccountViewModel
+import com.chaosnoteviewer.sync.SetupCode
 
 // Links the setup steps point to. The rules are part of this project; the user publishes them in their own project.
 const val FIREBASE_CONSOLE_URL = "https://console.firebase.google.com/"
@@ -82,7 +83,6 @@ fun SetupScreen(vm: AccountViewModel, onLocalOnly: () -> Unit, onConfigured: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (showForm) {
-                FirebaseSetupSteps()
                 FirebaseForm(
                     vm = vm,
                     initialKey = "",
@@ -142,9 +142,21 @@ fun FirebaseForm(
     var problem by rememberSaveable { mutableStateOf("") }
     var saving by rememberSaveable { mutableStateOf(false) }
 
+    val context = LocalContext.current
+
+    // a setup code from another device: the project and the encryption key at once
+    fun applyCode(text: String) {
+        saving = true
+        vm.applySetupCode(text) { result ->
+            saving = false
+            if (result == null) onSaved() else problem = result
+        }
+    }
+
     // a pasted snippet: take what it has, keep the field as it was for what it lacks
     fun take(text: String, intoKey: Boolean) {
         problem = ""
+        if (SetupCode.looksLikeOne(text)) return applyCode(text)
         val (k, p) = FirebaseConfig.extract(text)
         if (text.length > 60 && (k != null || p != null)) {
             k?.let { key = it }
@@ -161,6 +173,19 @@ fun FirebaseForm(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // the quickest way: the QR code another device shows next to its encryption key
+        OutlinedButton(
+            onClick = { problem = ""; scanQr(context, onText = ::applyCode, onError = { problem = it }) },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Scan the QR code of another device") }
+        Text(
+            "Another device already syncs? It shows this code in Settings, Show key. This is your first device? " +
+                "Set up a project and enter its two values:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FirebaseSetupSteps()
         OutlinedTextField(
             value = key,
             onValueChange = { take(it, intoKey = true) },
@@ -186,7 +211,7 @@ fun FirebaseForm(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            "Tip: paste the whole firebaseConfig snippet of a web app into a field, both values are taken from it.",
+            "Tip: paste the whole firebaseConfig snippet of a web app, or a copied setup code, into a field: the values are taken from it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

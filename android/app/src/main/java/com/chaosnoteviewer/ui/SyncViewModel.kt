@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chaosnoteviewer.ChaosApp
+import com.chaosnoteviewer.sync.SetupCode
 import com.chaosnoteviewer.sync.SyncManager
 import com.chaosnoteviewer.sync.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +35,8 @@ class SyncViewModel(private val app: ChaosApp, private val manager: SyncManager)
 
     fun sync() = viewModelScope.launch { manager.syncNow() }
     fun retryKeyFlow() = viewModelScope.launch { manager.startKeyFlow() }
-    fun submitKey(text: String) = viewModelScope.launch { manager.submitKey(text) }
+    // a pasted or scanned setup code works as well: its key is what counts here
+    fun submitKey(text: String) = viewModelScope.launch { manager.submitKey(SetupCode.keyOf(text)) }
     fun confirmKey() = viewModelScope.launch { manager.confirmKey() }
     fun toggleKeyShown() = viewModelScope.launch { manager.toggleKeyShown() }
     fun resetKey() = viewModelScope.launch { manager.resetKey() }
