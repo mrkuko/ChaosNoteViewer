@@ -32,6 +32,7 @@ set(SHARED_FILES
     shared/Migrations.js
     shared/NoteStore.js
     shared/QrCode.js
+    shared/SetupCode.js
     shared/QrImage.qml
     shared/Sync.js)
 foreach(f ${SHARED_FILES})

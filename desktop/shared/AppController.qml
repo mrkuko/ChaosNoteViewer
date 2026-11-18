@@ -4,6 +4,7 @@ import "Auth.js" as Auth
 import "Sync.js" as Sync
 import "KeyFlow.js" as KeyFlow
 import "FirebaseConfig.js" as FirebaseConfig
+import "SetupCode.js" as SetupCode
 
 // The whole non-visual part of the app, shared by every launcher (Plasma widget, Windows/Linux tray app):
 // notes, account (Firebase Auth), encryption key, sync. A launcher only provides
@@ -70,6 +71,23 @@ Item {
             NoteStore.setState("project_id", project)
         }
         setApiKey(key)
+    }
+
+    // A setup code from another device (copied, or read from its QR code): the project and the key at once.
+    // Returns "" when applied, otherwise what is wrong. The key waits in the database until the sign-in, then
+    // it is checked against the cloud copy like a typed one.
+    function applySetupCode(text) {
+        const code = SetupCode.parse(text)
+        if (code === null)
+            return "This is not a setup code. It starts with chaosnote:setup? (Settings, Show key, on the other device)."
+        const problem = firebaseProblem(code.apiKey, code.projectId)
+        if (problem !== "")
+            return problem
+        setFirebase(code.apiKey, code.projectId)
+        KeyFlow.storeEntered(code.key)
+        if (userEmail !== "" && idToken !== "")
+            startKeyFlow()
+        return ""
     }
 
     function setApiKey(key) {
@@ -171,6 +189,14 @@ Item {
     property int keyRun: 0             // identifies the running key task, a stale one is ignored
     property string keyError: ""
     property string keyValue: ""       // the key as shown to the user, "" until needed
+    // What the QR code next to the key carries: the Firebase project and the key at once, so another device is set
+    // up by one scan (SetupCode.js). Never the sign-in.
+    readonly property string setupCode: {
+        keyValue                           // read again when the key is shown, replaced or reset
+        if (!configured || (keyPhase !== "ready" && keyPhase !== "save"))
+            return ""
+        return SetupCode.make(projectId, apiKey, KeyFlow.keyText())
+    }
     property bool keyShown: false
     property bool resetOpen: false
     // Notes this device had synced that are gone from the server (deleted on another device).
@@ -639,6 +665,10 @@ Item {
     }
 
     function submitKey(text) {
+        // a pasted setup code works as well: its key is what counts here
+        const code = SetupCode.parse(text)
+        if (code !== null)
+            text = code.keyText
         const run = keyStart()
         KeyFlow.enter(authed, NoteStore.getState("uid"), text, function (error, result) {
             if (!keyFinish(run))

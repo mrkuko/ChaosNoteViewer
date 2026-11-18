@@ -41,6 +41,11 @@ Firestore database with the rules from `../core/firebase/firestore.rules`. On fi
 starts as `chaosnoteviewer`, the author's own project: replace it with yours. Changing the project signs you out and the
 notes of this device go up to the new project again.
 
+**Adding another device:** Settings, Show key shows a QR code with the whole setup: the Firebase project (Web API key,
+Project ID) and the encryption key, in the form `chaosnote:setup?v=1&p=<project id>&a=<api key>&k=<key>`. The phone app
+scans it; on another computer, Copy setup code and paste it into the Web API key field. The sign-in is never part of it:
+the new device still signs in with your email and password.
+
 Alternatively, a key can be built in as the default, and it is not committed:
 
 ```

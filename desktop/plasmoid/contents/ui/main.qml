@@ -694,9 +694,14 @@ PlasmoidItem {
                                 id: apiKeyField
                                 Layout.fillWidth: true
                                 visible: keyBox.editing
-                                placeholderText: i18n("Web API key")
+                                placeholderText: i18n("Web API key, or paste a setup code")
                                 text: ctl.apiKey
                                 onAccepted: projectField.forceActiveFocus()
+                                // a setup code from another device (Copy setup code there) fills in the project and the key at once
+                                onTextChanged: if (text.trim().toLowerCase().indexOf("chaosnote:setup?") === 0) {
+                                    keyBox.problem = ctl.applySetupCode(text)
+                                    if (keyBox.problem === "") keyBox.editing = false
+                                }
                             }
                             PlasmaComponents3.TextField {
                                 id: projectField
@@ -854,16 +859,29 @@ PlasmoidItem {
                                                 text: ctl.keyValue
                                             }
                                         }
-                                        // the same key for the phone's camera (the one-line form: the lines joined by "-")
+                                        // for the phone's camera: the Firebase project and the key at once (SetupCode.js)
                                         QrImage {
                                             Layout.alignment: Qt.AlignHCenter
                                             implicitWidth: Kirigami.Units.gridUnit * 12
-                                            text: ctl.keyValue.replace(/\n/g, "-")
+                                            text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                                        }
+                                        PlasmaComponents3.Label {
+                                            Layout.fillWidth: true
+                                            visible: ctl.setupCode !== ""
+                                            wrapMode: Text.Wrap
+                                            horizontalAlignment: Text.AlignHCenter
+                                            opacity: 0.7
+                                            text: i18n("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                                         }
                                         RowLayout {
                                             TextButton {
                                                 text: i18n("Copy key")
                                                 onClicked: root.copyText(ctl.keyText())
+                                            }
+                                            TextButton {
+                                                visible: ctl.setupCode !== ""
+                                                text: i18n("Copy setup code")
+                                                onClicked: root.copyText(ctl.setupCode)
                                             }
                                             TextButton {
                                                 primary: true
@@ -919,6 +937,11 @@ PlasmoidItem {
                                                 text: i18n("Copy key")
                                                 onClicked: root.copyText(ctl.keyText())
                                             }
+                                            TextButton {
+                                                visible: ctl.setupCode !== ""
+                                                text: i18n("Copy setup code")
+                                                onClicked: root.copyText(ctl.setupCode)
+                                            }
                                         }
                                         Rectangle {
                                             Layout.alignment: Qt.AlignHCenter
@@ -945,7 +968,15 @@ PlasmoidItem {
                                             Layout.alignment: Qt.AlignHCenter
                                             visible: ctl.keyShown
                                             implicitWidth: Kirigami.Units.gridUnit * 12
-                                            text: ctl.keyValue.replace(/\n/g, "-")
+                                            text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                                        }
+                                        PlasmaComponents3.Label {
+                                            Layout.fillWidth: true
+                                            visible: ctl.keyShown && ctl.setupCode !== ""
+                                            wrapMode: Text.Wrap
+                                            horizontalAlignment: Text.AlignHCenter
+                                            opacity: 0.7
+                                            text: i18n("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                                         }
                                     }
 

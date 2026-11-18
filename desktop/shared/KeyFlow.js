@@ -38,6 +38,10 @@ function _store(key, confirmed) {
 
 function confirmSaved() { NoteStore.setState("key_confirmed", "1") }
 
+// A key that came with a setup code: kept as confirmed (the user has it on the other device); begin() checks it
+// against the cloud once signed in and asks again if it does not match.
+function storeEntered(key) { _store(key, true) }
+
 function _create(call, uid, key, done) {
     call(function (token, cb) { Sync.createKeyCheck(uid, token, key, cb) }, done)
 }

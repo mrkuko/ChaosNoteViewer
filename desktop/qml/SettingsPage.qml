@@ -65,9 +65,14 @@ ScrollView {
                 id: apiKeyField
                 Layout.fillWidth: true
                 visible: keyBox.editing
-                placeholderText: qsTr("Web API key")
+                placeholderText: qsTr("Web API key, or paste a setup code")
                 text: ctl.apiKey
                 onAccepted: projectField.forceActiveFocus()
+                // a setup code from another device (Copy setup code there) fills in the project and the key at once
+                onTextChanged: if (text.trim().toLowerCase().indexOf("chaosnote:setup?") === 0) {
+                    keyBox.problem = ctl.applySetupCode(text)
+                    if (keyBox.problem === "") keyBox.editing = false
+                }
             }
             TextField {
                 id: projectField
@@ -226,15 +231,28 @@ ScrollView {
                             text: ctl.keyValue
                         }
                     }
-                    // the same key for the phone's camera (the one-line form: the lines joined by "-")
+                    // for the phone's camera: the Firebase project and the key at once (SetupCode.js)
                     QrImage {
                         Layout.alignment: Qt.AlignHCenter
-                        text: ctl.keyValue.replace(/\n/g, "-")
+                        text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: ctl.setupCode !== ""
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: Text.AlignHCenter
+                        opacity: 0.7
+                        text: qsTr("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                     }
                     RowLayout {
                         TextButton {
                             text: qsTr("Copy key")
                             onClicked: page.app.copyText(ctl.keyText())
+                        }
+                        TextButton {
+                            visible: ctl.setupCode !== ""
+                            text: qsTr("Copy setup code")
+                            onClicked: page.app.copyText(ctl.setupCode)
                         }
                         TextButton {
                             primary: true
@@ -290,6 +308,11 @@ ScrollView {
                             text: qsTr("Copy key")
                             onClicked: page.app.copyText(ctl.keyText())
                         }
+                        TextButton {
+                            visible: ctl.setupCode !== ""
+                            text: qsTr("Copy setup code")
+                            onClicked: page.app.copyText(ctl.setupCode)
+                        }
                     }
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
@@ -315,7 +338,15 @@ ScrollView {
                     QrImage {
                         Layout.alignment: Qt.AlignHCenter
                         visible: ctl.keyShown
-                        text: ctl.keyValue.replace(/\n/g, "-")
+                        text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: ctl.keyShown && ctl.setupCode !== ""
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: Text.AlignHCenter
+                        opacity: 0.7
+                        text: qsTr("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                     }
                 }
 
