@@ -46,9 +46,12 @@
 **Your data**
 
 - **Local-first.** Notes live in a database on the device. No account and no network needed.
-- **Encrypted sync.** Sign in to sync between the desktop and the phone. Notes are encrypted on the device with
-  ChaCha20-Poly1305 before they leave it. The key exists only on your devices: the cloud stores ciphertext and never
-  the key.
+- **Encrypted sync through your own Firebase project.** Sign in to sync between the desktop and the phone. The cloud
+  is a free Firebase project that you create yourself, so your notes are never kept on somebody else's server. Notes
+  are encrypted on the device with ChaCha20-Poly1305 before they leave it. The key exists only on your devices: the
+  cloud stores ciphertext and never the key.
+- **One scan to add a device.** A device that already syncs shows a QR code with the whole setup (your project and
+  the encryption key); the new phone scans it and you only sign in.
 - **Sync that keeps up.** Changes go out a couple of seconds after you make them, the open app pulls every 30 seconds,
   and on Android a background job syncs about every 15 minutes and as soon as the network is back.
 
@@ -110,10 +113,37 @@ The tray app and the Plasma widget share one interface.
 | Android 9 or newer | APK in [Releases](../../releases), source on the [`android`](../../tree/android/android) branch |
 | KDE Plasma 6 widget, tray app for Linux and Windows (Qt 6) | source and build instructions on the [`desktop`](../../tree/desktop/desktop) branch |
 
+## Sync with your own Firebase project
+
+The apps work fully without it. To sync, every user brings their own Firebase project: nothing of a project is built
+into the apps, and no notes ever pass through a server of the author. Firebase's free Spark plan is enough.
+
+**Set up the project once:**
+
+1. Create a project in the [Firebase console](https://console.firebase.google.com/).
+2. **Authentication** → Get started → Sign-in method: enable **Email/Password**.
+3. **Firestore Database** → Create database. Then, on its **Rules** tab, replace the rules with the contents of
+   [core/firebase/firestore.rules](core/firebase/firestore.rules) and press Publish. They let each account read and
+   write only its own notes, and only with a verified email.
+4. **Project settings** → General: note the **Project ID** and the **Web API key**. (If the key field is empty, add a
+   Web app on the same page; its `firebaseConfig` snippet shows the key as `apiKey`.)
+
+**First device:** the apps ask for these two values on first start, or later in Settings (Firebase project). Pasting
+the whole `firebaseConfig` snippet into the key field works too. Then create an account, open the link in the
+verification email, and the app creates your encryption key: store it somewhere safe.
+
+**Next devices:** on the device that already syncs, open Settings → Show key. It shows a QR code with the project and
+the encryption key (the [setup code](core/crypto/README.md#setup-code)). Scan it on the new phone's first start, or
+use Copy setup code and paste it on another computer, then sign in with the same email and password. The sign-in is
+never part of the code: whoever sees it still needs your password.
+
+The Web API key is not a secret in Firebase's sense (it identifies the project, it grants nothing); what protects your
+notes are the security rules, your password and the encryption key.
+
 ## How the encryption works
 
-The first device you sign in on creates a random 256-bit key and shows it to you as text. Other devices ask you to type
-it in. Each note is encrypted separately (ChaCha20-Poly1305, its id bound in as associated data), so the server can't
+The first device you sign in on creates a random 256-bit key and shows it to you as text and as a QR code. Other
+devices ask you to type it in or scan it. Each note is encrypted separately (ChaCha20-Poly1305, its id bound in as associated data), so the server can't
 read, swap or mix notes. To tell a wrong key from a right one, the cloud keeps one known text encrypted with your key,
 never the key itself. Lose every device and the key, and the notes in the cloud can't be read by anyone, including you.
 
