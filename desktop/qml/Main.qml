@@ -21,7 +21,7 @@ ApplicationWindow {
     onActiveChanged: if (!active) hide()
 
     // UI state of this launcher
-    property bool settingsOpen: !ctl.setupSeen   // first run opens on the API key setup
+    property bool settingsOpen: !ctl.setupSeen   // first run opens on the Firebase project setup
     property bool addOpen: false
     // the calendar of deadlines is shown instead of the notes list
     property bool calendarOpen: false

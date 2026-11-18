@@ -34,19 +34,23 @@ because the widget cannot read `core/` at runtime. Run it again after every chan
 
 ### Sign-in (Firebase)
 
-The widget works without an account. To sign in and sync, give it your Firebase Web API key
-(Firebase console, Project settings, General, Your apps). On first open the app asks for it
-(Settings, Firebase API key, with an Edit button afterwards); it is kept in the local database.
+The app works without an account. To sign in and sync, give it your own Firebase project: the **Web API key** and the
+**Project ID** (Firebase console, Project settings, General). The project needs Email/Password sign-in enabled and a
+Firestore database with the rules from `../core/firebase/firestore.rules`. On first open the app asks for both
+(Settings, Firebase project, with an Edit button afterwards); they are kept in the local database. The Project ID field
+starts as `chaosnoteviewer`, the author's own project: replace it with yours. Changing the project signs you out and the
+notes of this device go up to the new project again.
+
 Alternatively, a key can be built in as the default, and it is not committed:
 
 ```
-cp firebase.local.example.json firebase.local.json     # then paste the apiKey into it
+cp firebase.local.example.json firebase.local.json     # then paste the apiKey (and your projectId) into it
 ./install.sh
 ```
 
-`install.sh` combines it with the project id from `../core/firebase/.firebaserc` into
-`plasmoid/contents/ui/FirebaseConfig.js` (generated, not committed). Set `"emulator": true` in
-`firebase.local.json` to use the local Auth emulator (`npm run emulators` in `core/firebase`) instead.
+`install.sh` writes it, with the project id (`projectId` in that file, otherwise the one in
+`../core/firebase/.firebaserc`), into `plasmoid/contents/ui/FirebaseConfig.js` (generated, not committed). Set
+`"emulator": true` in `firebase.local.json` to use the local Auth emulator (`npm run emulators` in `core/firebase`) instead.
 
 The first account that signs in owns the notes on that device. Signing out keeps the notes,
 and only that account can sign in on the device again. The refresh token that keeps you signed in

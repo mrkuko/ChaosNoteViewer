@@ -29,19 +29,20 @@ ScrollView {
         width: page.availableWidth
         spacing: Theme.large
 
-        // ---- Firebase API key: entered here, kept on this device ----
+        // ---- Firebase project (Web API key, project id): entered here, kept on this device ----
         Label {
             Layout.leftMargin: Theme.large
             Layout.rightMargin: Theme.large
             Layout.topMargin: Theme.large
             font.pointSize: 12
             font.bold: true
-            text: qsTr("Firebase API key")
+            text: qsTr("Firebase project")
         }
         ColumnLayout {
             id: keyBox
             // editing while there is no key yet (first run) or after pressing Edit
             property bool editing: !ctl.configured
+        property string problem: ""
             Layout.fillWidth: true
             Layout.leftMargin: Theme.large
             Layout.rightMargin: Theme.large
@@ -57,8 +58,8 @@ ScrollView {
                 wrapMode: Text.Wrap
                 opacity: 0.7
                 text: keyBox.editing
-                    ? qsTr("Needed to sign in and sync. Paste the Web API key from the Firebase console (Project settings, General, Your apps). Without it the notes stay on this device only.")
-                    : qsTr("Key set: %1").arg(ctl.apiKey.length > 8 ? "…" + ctl.apiKey.slice(-4) : "••••")
+                    ? qsTr("Needed to sign in and sync. Every user syncs through their own Firebase project: paste its Web API key and Project ID from the Firebase console (Project settings, General). Without them the notes stay on this device only.")
+                    : qsTr("Project: %1, key …%2").arg(ctl.projectId).arg(ctl.apiKey.slice(-4))
             }
             TextField {
                 id: apiKeyField
@@ -66,7 +67,22 @@ ScrollView {
                 visible: keyBox.editing
                 placeholderText: qsTr("Web API key")
                 text: ctl.apiKey
+                onAccepted: projectField.forceActiveFocus()
+            }
+            TextField {
+                id: projectField
+                Layout.fillWidth: true
+                visible: keyBox.editing
+                placeholderText: qsTr("Project ID")
+                text: ctl.projectId
                 onAccepted: saveKeyButton.clicked()
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: keyBox.editing && keyBox.problem !== ""
+                wrapMode: Text.Wrap
+                color: "#e06c75"
+                text: keyBox.problem
             }
             RowLayout {
                 spacing: Theme.small
@@ -75,13 +91,16 @@ ScrollView {
                     primary: true
                     visible: keyBox.editing
                     text: qsTr("Save")
-                    enabled: apiKeyField.text.trim() !== ""
-                    onClicked: if (enabled) { ctl.setApiKey(apiKeyField.text); keyBox.editing = false }
+                    enabled: apiKeyField.text.trim() !== "" && projectField.text.trim() !== ""
+                    onClicked: if (enabled) {
+                keyBox.problem = ctl.firebaseProblem(apiKeyField.text, projectField.text)
+                if (keyBox.problem === "") { ctl.setFirebase(apiKeyField.text, projectField.text); keyBox.editing = false }
+            }
                 }
                 TextButton {
                     visible: keyBox.editing && ctl.configured
                     text: qsTr("Cancel")
-                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = false }
+                    onClicked: { apiKeyField.text = ctl.apiKey; projectField.text = ctl.projectId; keyBox.problem = ""; keyBox.editing = false }
                 }
                 TextButton {
                     visible: keyBox.editing && !ctl.configured && !ctl.setupSeen
@@ -91,7 +110,7 @@ ScrollView {
                 TextButton {
                     visible: !keyBox.editing
                     text: qsTr("Edit")
-                    onClicked: { apiKeyField.text = ctl.apiKey; keyBox.editing = true }
+                    onClicked: { apiKeyField.text = ctl.apiKey; projectField.text = ctl.projectId; keyBox.editing = true }
                 }
             }
         }
@@ -415,7 +434,7 @@ ScrollView {
                 opacity: 0.7
                 text: ctl.configured
                     ? qsTr("Notes are stored on this device. Sign in to sync them between devices.")
-                    : qsTr("Notes are stored on this device. Sign-in is not set up: enter your Firebase API key above.")
+                    : qsTr("Notes are stored on this device. Sign-in is not set up: enter your Firebase project above.")
             }
 
             TextField {

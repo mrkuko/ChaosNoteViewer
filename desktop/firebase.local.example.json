@@ -1,4 +1,5 @@
 {
   "apiKey": "paste the Web API key from Firebase project settings here",
+  "projectId": "chaosnoteviewer",
   "emulator": false
 }

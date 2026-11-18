@@ -40,8 +40,37 @@ Item {
     // from desktop/firebase.local.json is the default.
     property bool configured: FirebaseConfig.configured
     property string apiKey: FirebaseConfig.apiKey
+    // the Firebase project to sync with: the one built in (core/firebase/.firebaserc, "chaosnoteviewer") unless the
+    // user entered their own. Every user brings their own project; the default only helps the author.
+    property string projectId: FirebaseConfig.projectId
     // the first-run setup was shown (and saved or skipped), so the app opens on the notes from now on
     property bool setupSeen: true
+
+    // Web API key and project id look right (the real check is Firebase's answer): "" = fine, else what is wrong
+    function firebaseProblem(key, project) {
+        if (!/^AIza[0-9A-Za-z_-]{35}$/.test(key.trim()))
+            return "This does not look like a Web API key (it starts with AIza and has 39 characters)."
+        if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project.trim()))
+            return "This does not look like a project ID (lowercase letters, digits and hyphens, e.g. my-notes-1a2b3)."
+        return ""
+    }
+
+    // Saves the Firebase project. Another project means another cloud copy: the session ends, everything on this
+    // device goes up again later, and the encryption key is set up again.
+    function setFirebase(key, project) {
+        key = key.trim()
+        project = project.trim()
+        if (project !== projectId) {
+            signOut()
+            NoteStore.forgetRemote()
+            NoteStore.clearState("enc_key")
+            NoteStore.clearState("key_confirmed")
+            projectId = project
+            FirebaseConfig.setProjectId(project)
+            NoteStore.setState("project_id", project)
+        }
+        setApiKey(key)
+    }
 
     function setApiKey(key) {
         key = key.trim()
@@ -748,6 +777,11 @@ Item {
     }
 
     Component.onCompleted: {
+        const savedProject = NoteStore.getState("project_id")
+        if (savedProject !== "") {
+            FirebaseConfig.setProjectId(savedProject)
+            projectId = savedProject
+        }
         const savedKey = NoteStore.getState("api_key")
         if (savedKey !== "") {
             FirebaseConfig.setApiKey(savedKey)
