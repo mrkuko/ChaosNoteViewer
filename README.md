@@ -8,7 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="../../releases"><img src="https://img.shields.io/github/v/release/mrkuko/ChaosNoteViewer?include_prereleases&label=android&color=14a3a6" alt="Latest Android release"></a>
+  <a href="../../releases?q=android-v&expanded=true"><img src="https://img.shields.io/github/v/release/mrkuko/ChaosNoteViewer?filter=android-v*&label=android&color=14a3a6" alt="Latest Android release"></a>
+  <a href="../../releases?q=desktop-v&expanded=true"><img src="https://img.shields.io/github/v/release/mrkuko/ChaosNoteViewer?filter=desktop-v*&label=desktop&color=14a3a6" alt="Latest desktop release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-14a3a6" alt="License: GPL-3.0-or-later"></a>
   <img src="https://img.shields.io/badge/platforms-Android%20%C2%B7%20KDE%20Plasma%20%C2%B7%20Linux%20%C2%B7%20Windows-0f6f73" alt="Platforms">
 </p>
@@ -110,8 +111,10 @@ The tray app and the Plasma widget share one interface.
 
 | Client | Where |
 |---|---|
-| Android 9 or newer | APK in [Releases](../../releases), source on the [`android`](../../tree/android/android) branch |
-| KDE Plasma 6 widget, tray app for Linux and Windows (Qt 6) | source and build instructions on the [`desktop`](../../tree/desktop/desktop) branch |
+| Android 9 or newer | APK in the [Android releases](../../releases?q=android-v&expanded=true) (tags `android-v*`), source on the [`android`](../../tree/android/android) branch |
+| Windows, Linux (AppImage, x86_64 and ARM64), KDE Plasma 6 widget | zip, AppImage and `.plasmoid` in the [desktop releases](../../releases?q=desktop-v&expanded=true) (tags `desktop-v*`), source and build instructions on the [`desktop`](../../tree/desktop/desktop) branch |
+
+Each release lists its files and how to install them.
 
 ## Sync with your own Firebase project
 
