@@ -68,6 +68,20 @@ import com.chaosnoteviewer.account.Account
 import com.chaosnoteviewer.account.AccountState
 import com.chaosnoteviewer.ui.AccountViewModel
 import com.chaosnoteviewer.ui.SyncViewModel
+import com.chaosnoteviewer.ui.QrCode
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 // Settings: the account (sign in, email verification). Encryption key and sync state arrive in phase 5.
 @OptIn(ExperimentalMaterial3Api::class)
@@ -228,6 +242,8 @@ private fun SyncSection(vm: SyncViewModel) {
         }
         KeyPhase.Enter -> {
             var typed by rememberSaveable { mutableStateOf("") }
+            var scanError by rememberSaveable { mutableStateOf("") }
+            val context = LocalContext.current
             Text(
                 if (state.mismatch) "The encryption key changed" else "Enter your encryption key",
                 style = MaterialTheme.typography.titleSmall,
@@ -236,7 +252,8 @@ private fun SyncSection(vm: SyncViewModel) {
                 if (state.mismatch)
                     "The notes in the cloud were encrypted with another key (it was reset on another device). Enter the new key to continue."
                 else
-                    "Your notes in the cloud are encrypted. Enter the key you saved when you first signed in on your other device.",
+                    "Your notes in the cloud are encrypted. Enter the key you saved when you first signed in on your other device, " +
+                        "or scan its QR code (Settings on the desktop app, Show key).",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
@@ -251,9 +268,19 @@ private fun SyncSection(vm: SyncViewModel) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = { vm.submitKey(typed) }, enabled = !state.keyBusy && typed.isNotBlank()) { Text("Continue") }
-                TextButton(onClick = { confirmReset = true }, enabled = !state.keyBusy) { Text("I lost the key") }
+                OutlinedButton(
+                    onClick = {
+                        scanError = ""
+                        // the scanned text goes the same way as typed text, so a foreign QR gets the usual key error
+                        scanKey(context, onText = { typed = it; vm.submitKey(it) }, onError = { scanError = it })
+                    },
+                    enabled = !state.keyBusy,
+                ) { Text("Scan QR code") }
                 if (state.keyBusy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
             }
+            if (scanError.isNotEmpty())
+                Text(scanError, color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = { confirmReset = true }, enabled = !state.keyBusy) { Text("I lost the key") }
         }
         KeyPhase.Unknown -> {
             Text(
@@ -281,21 +308,59 @@ private fun SyncSection(vm: SyncViewModel) {
         )
 }
 
-// the key as four lines, copyable as one
+// the key as four lines, copyable as one, and as a QR code for another phone
 @Composable
 private fun KeyBlock(block: String) {
     if (block.isEmpty()) return
     val context = LocalContext.current
+    // no screenshots or recent-apps preview while the key is on screen
+    DisposableEffect(Unit) {
+        val window = context.findActivity()?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
     Text(
         block,
         fontFamily = FontFamily.Monospace,
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     )
+    // the same content as the desktop's QR: the key on one line
+    KeyQr(block.lines().joinToString("-"))
     OutlinedButton(onClick = {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText("Encryption key", block.lines().joinToString("-")))
     }) { Text("Copy key") }
+}
+
+// black on white with the 4-module quiet zone in both themes, so a camera reads it
+@Composable
+private fun KeyQr(text: String) {
+    val qr = remember(text) { QrCode.encode(text) } ?: return
+    Canvas(Modifier.size(220.dp).background(Color.White)) {
+        val cells = qr.size + 8
+        val cell = size.minDimension / cells
+        for (y in 0 until qr.size)
+            for (x in 0 until qr.size)
+                if (qr.isDark(x, y))
+                    // a hair larger than the cell, so no seams show between neighbours
+                    drawRect(Color.Black, Offset((x + 4) * cell, (y + 4) * cell), Size(cell + 0.5f, cell + 0.5f))
+    }
+}
+
+// Google's code scanner: it draws the camera screen itself, the app needs no camera permission. The scanner
+// module is downloaded by Play services on first use.
+private fun scanKey(context: Context, onText: (String) -> Unit, onError: (String) -> Unit) {
+    val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+    GmsBarcodeScanning.getClient(context, options).startScan()
+        .addOnSuccessListener { barcode -> barcode.rawValue?.let(onText) }
+        .addOnFailureListener { onError("Could not start the QR scanner (it needs Google Play services). Type the key instead.") }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun formatTime(ms: Long): String =

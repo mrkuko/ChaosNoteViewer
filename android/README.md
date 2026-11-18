@@ -10,7 +10,8 @@ Kotlin, Jetpack Compose, Room, WorkManager, Glance (home screen widget), Firebas
 - Notes with a deadline, filters (open, completed, all, important), sorting, drag to reorder, links in the text.
 - Account with email verification; the notes on a device belong to one account.
 - Encrypted sync (ChaCha20-Poly1305, the same format as the desktop app, see `../core/crypto/`). The key is created on the
-  first device and typed in on the others; it is never stored in the cloud.
+  first device and typed in on the others, or scanned from its QR code (desktop app or another phone: Settings, Show key);
+  it is never stored in the cloud. Scanning uses Google's code scanner, so the app needs no camera permission.
 - Sync soon after a change, every 30 s while the app is open, about every 15 minutes while it is closed, and as soon as the
   network is back after changes made offline.
 - Home screen widget and a morning reminder: one notification for every note that is due today or overdue, with a Done button.
