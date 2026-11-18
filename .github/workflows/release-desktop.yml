@@ -58,11 +58,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the package
-        run: sh desktop/packaging/make-plasmoid.sh "${{ needs.meta.outputs.version }}" dist
+        # an absolute path: the script works inside desktop/
+        run: sh desktop/packaging/make-plasmoid.sh "${{ needs.meta.outputs.version }}" "$GITHUB_WORKSPACE/dist"
       - uses: actions/upload-artifact@v4
         with:
           name: plasmoid
           path: dist/*.plasmoid
+          if-no-files-found: error
 
   # the tray app for Linux as an AppImage with the Qt libraries inside, for x86_64 (glibc 2.35 or newer) and aarch64
   # (glibc 2.39 or newer: the Qt build for ARM from aqtinstall needs a newer system than 22.04). The ARM runners are
@@ -120,6 +122,7 @@ jobs:
         with:
           name: linux-${{ matrix.arch }}
           path: dist/*.AppImage
+          if-no-files-found: error
 
   # the tray app for Windows: the .exe and the Qt libraries it needs, as a zip
   windows:
@@ -167,6 +170,7 @@ jobs:
         with:
           name: windows
           path: dist/*.zip
+          if-no-files-found: error
 
   release:
     needs: [meta, plasmoid, linux, windows]
@@ -184,6 +188,10 @@ jobs:
 
       - name: Checksums and release notes
         run: |
+          for f in 'ChaosNoteViewer-*-windows-x64.zip' 'ChaosNoteViewer-*-linux-x86_64.AppImage' \
+                   'ChaosNoteViewer-*-linux-aarch64.AppImage' 'ChaosNoteViewer-plasmoid-*.plasmoid'; do
+            ls dist/$f >/dev/null 2>&1 || { echo "::error::$f is missing, nothing was published."; exit 1; }
+          done
           cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
           DIST=dist sh .github/scripts/release-notes-desktop.sh "$GITHUB_REF_NAME" > notes.md
           cat notes.md

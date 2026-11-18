@@ -57,15 +57,39 @@ fi
 cat <<E2
 ## Downloads
 
-| System | File | Install |
-|---|---|---|
-| Windows 10/11 | \`$WIN\` | Unzip it anywhere and run \`chaosnoteviewer.exe\`. Windows may warn that the app is unsigned: More info, Run anyway. |
-| Linux, any distribution (x86_64) | \`$LIN\` | \`chmod +x $LIN && ./$LIN\`. It needs FUSE 2 (\`libfuse2\`), or run it with \`--appimage-extract-and-run\`. |
-| Linux, any distribution (ARM64) | \`$ARM\` | The same, for 64-bit ARM computers (glibc 2.39 or newer, e.g. Ubuntu 24.04). |
-| KDE Plasma 6 widget | \`$PLA\` | \`kpackagetool6 -t Plasma/Applet -i $PLA\` (\`-u\` instead of \`-i\` to upgrade), then add it from Add Widgets. |
+| System | File |
+|---|---|
+| Windows 10/11 (64-bit) | \`$WIN\` |
+| Linux, any distribution (x86_64, glibc 2.35+) | \`$LIN\` |
+| Linux, any distribution (ARM64, glibc 2.39+) | \`$ARM\` |
+| KDE Plasma 6 widget (panel or desktop) | \`$PLA\` |
 
-Checksums are in \`SHA256SUMS\`. To sync, the apps ask for your own Firebase project on first start, see the
-[README](https://github.com/$REPO#sync-with-your-own-firebase-project).
+Checksums are in \`SHA256SUMS\`. Everything works without an account; to sync, the app asks for your own Firebase
+project on first start, see the [README](https://github.com/$REPO#sync-with-your-own-firebase-project).
+
+## Install
+
+**Windows:** unzip the file anywhere and run \`chaosnoteviewer.exe\`; the notes icon appears in the notification area.
+The app is not signed, so Windows may show "Windows protected your PC": More info, Run anyway.
+
+**Linux tray app:** make the AppImage executable and run it:
+
+\`\`\`sh
+chmod +x $LIN
+./$LIN
+\`\`\`
+
+It needs FUSE 2 (\`libfuse2\`); without it, run it with \`--appimage-extract-and-run\`.
+
+**KDE Plasma widget:** the \`.plasmoid\` file is the whole widget. Either
+
+- right-click the desktop or a panel, **Add or Manage Widgets**, **Get New**, **Install Widget From Local File...**,
+  choose \`$PLA\`; or
+- in a terminal: \`kpackagetool6 -t Plasma/Applet -i $PLA\`
+
+Then find **Chaos Note Viewer** in Add or Manage Widgets and drag it onto a panel or the desktop.
+To update an installed widget: \`kpackagetool6 -t Plasma/Applet -u $PLA\`, then log out and in again (or run
+\`plasmashell --replace &\`). To remove it: \`kpackagetool6 -t Plasma/Applet -r org.kde.plasma.chaosnoteviewer\`.
 
 ## What's new
 
