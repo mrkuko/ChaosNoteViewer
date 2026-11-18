@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.kirigami as Kirigami
@@ -646,8 +647,16 @@ PlasmoidItem {
                             }
                         }
 
-                        // Settings; real options arrive with the features they control.
+                        // Settings; real options arrive with the features they control. Scrolls: the key with its
+                        // QR code is taller than the popup.
+                        PlasmaComponents3.ScrollView {
+                        id: settingsScroll
+                        contentWidth: availableWidth
+                        clip: true
+                        QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
+
                         ColumnLayout {
+                            width: settingsScroll.availableWidth
                             spacing: Kirigami.Units.largeSpacing
 
                         // ---- Firebase API key: entered here, kept on this device ----
@@ -826,6 +835,12 @@ PlasmoidItem {
                                                 text: ctl.keyValue
                                             }
                                         }
+                                        // the same key for the phone's camera (the one-line form: the lines joined by "-")
+                                        QrImage {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            implicitWidth: Kirigami.Units.gridUnit * 12
+                                            text: ctl.keyValue.replace(/\n/g, "-")
+                                        }
                                         RowLayout {
                                             TextButton {
                                                 text: i18n("Copy key")
@@ -906,6 +921,12 @@ PlasmoidItem {
                                                 color: Kirigami.Theme.textColor
                                                 text: ctl.keyValue
                                             }
+                                        }
+                                        QrImage {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            visible: ctl.keyShown
+                                            implicitWidth: Kirigami.Units.gridUnit * 12
+                                            text: ctl.keyValue.replace(/\n/g, "-")
                                         }
                                     }
 
@@ -1106,6 +1127,7 @@ PlasmoidItem {
                                         passwordField.text = ""
                                 }
                             }
+                        }
                         }
 
                         CalendarPage {

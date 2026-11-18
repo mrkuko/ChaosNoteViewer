@@ -207,6 +207,11 @@ ScrollView {
                             text: ctl.keyValue
                         }
                     }
+                    // the same key for the phone's camera (the one-line form: the lines joined by "-")
+                    QrImage {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: ctl.keyValue.replace(/\n/g, "-")
+                    }
                     RowLayout {
                         TextButton {
                             text: qsTr("Copy key")
@@ -287,6 +292,11 @@ ScrollView {
                             color: Theme.text
                             text: ctl.keyValue
                         }
+                    }
+                    QrImage {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: ctl.keyShown
+                        text: ctl.keyValue.replace(/\n/g, "-")
                     }
                 }
 

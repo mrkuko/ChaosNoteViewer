@@ -60,8 +60,9 @@ and every 5 min otherwise (slower while offline). Notes are encrypted on the dev
 ChaCha20-Poly1305 (`Crypto.js`) before they are uploaded.
 
 - **Key:** the first device creates a random key and shows it. Save it: it is needed to add another
-  device and cannot be recovered. Settings, Account shows or copies it again at any time. It is stored
-  in the local database, next to the notes it protects the cloud copy of.
+  device and cannot be recovered. Settings, Account shows or copies it again at any time, also as a QR
+  code (just the key text) for a phone's camera. It is stored in the local database, next to the notes it
+  protects the cloud copy of.
 - **Lost the key:** Settings, Reset key deletes everything in the cloud, creates a new key and uploads
   this device's notes again. Other devices are asked for the new key.
 - **Deleting** removes the note from the cloud for real, the local copy goes once the server confirmed.
@@ -70,7 +71,7 @@ ChaCha20-Poly1305 (`Crypto.js`) before they are uploaded.
 ### Code layout: one app, two launchers
 
 All app logic is written once, in `shared/`: `AppController.qml` (notes, account, encryption key, sync, as
-one non-visual QML item), `NoteStore.js`, `Auth.js`, `Sync.js`, `KeyFlow.js`, `Crypto.js`. Two launchers
+one non-visual QML item), `NoteStore.js`, `Auth.js`, `Sync.js`, `KeyFlow.js`, `Crypto.js`, `QrCode.js` with `QrImage.qml`. Two launchers
 use it:
 
 | | Plasma widget (`plasmoid/`) | Tray app (`src/`, `qml/`, CMake) |

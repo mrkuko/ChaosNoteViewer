@@ -31,6 +31,8 @@ set(SHARED_FILES
     shared/KeyFlow.js
     shared/Migrations.js
     shared/NoteStore.js
+    shared/QrCode.js
+    shared/QrImage.qml
     shared/Sync.js)
 foreach(f ${SHARED_FILES})
     get_filename_component(name ${f} NAME)
