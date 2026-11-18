@@ -41,10 +41,10 @@ Firestore database with the rules from `../core/firebase/firestore.rules`. On fi
 starts as `chaosnoteviewer`, the author's own project: replace it with yours. Changing the project signs you out and the
 notes of this device go up to the new project again.
 
-**Adding another device:** Settings, Show key shows a QR code with the whole setup: the Firebase project (Web API key,
-Project ID) and the encryption key, in the form `chaosnote:setup?v=1&p=<project id>&a=<api key>&k=<key>`. The phone app
-scans it; on another computer, Copy setup code and paste it into the Web API key field. The sign-in is never part of it:
-the new device still signs in with your email and password.
+**Adding another device:** Settings, Show setup code shows a QR code with the whole setup: the Firebase project (Web API
+key, Project ID) and the encryption key, in the form `chaosnote:setup?v=1&p=<project id>&a=<api key>&k=<key>`. The phone
+app scans it. On another computer, use Copy setup code and paste it into the Web API key field. The sign-in is never part
+of it, the new device still signs in with your email and password.
 
 Alternatively, a key can be built in as the default, and it is not committed:
 
@@ -69,8 +69,8 @@ and every 5 min otherwise (slower while offline). Notes are encrypted on the dev
 ChaCha20-Poly1305 (`Crypto.js`) before they are uploaded.
 
 - **Key:** the first device creates a random key and shows it. Save it: it is needed to add another
-  device and cannot be recovered. Settings, Account shows or copies it again at any time, also as a QR
-  code (just the key text) for a phone's camera. It is stored in the local database, next to the notes it
+  device and cannot be recovered. Settings, Account shows or copies it again at any time (Show key), or
+  shows it inside the setup QR code for a phone's camera (Show setup code). It is stored in the local database, next to the notes it
   protects the cloud copy of.
 - **Lost the key:** Settings, Reset key deletes everything in the cloud, creates a new key and uploads
   this device's notes again. Other devices are asked for the new key.

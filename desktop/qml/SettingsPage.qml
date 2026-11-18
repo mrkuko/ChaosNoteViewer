@@ -212,7 +212,7 @@ ScrollView {
                     }
                     // four fixed lines, never re-wrapped by the width of the window
                     Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
+                        visible: !ctl.setupShown
                         implicitWidth: keyBlockSave.implicitWidth + Theme.large * 2
                         implicitHeight: keyBlockSave.implicitHeight + Theme.large * 2
                         radius: Theme.radius
@@ -233,26 +233,25 @@ ScrollView {
                     }
                     // for the phone's camera: the Firebase project and the key at once (SetupCode.js)
                     QrImage {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                        visible: ctl.setupShown
+                        text: ctl.setupCode
                     }
                     Label {
                         Layout.fillWidth: true
-                        visible: ctl.setupCode !== ""
+                        visible: ctl.setupShown
                         wrapMode: Text.Wrap
-                        horizontalAlignment: Text.AlignHCenter
                         opacity: 0.7
                         text: qsTr("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                     }
                     RowLayout {
                         TextButton {
-                            text: qsTr("Copy key")
-                            onClicked: page.app.copyText(ctl.keyText())
+                            visible: ctl.setupCode !== ""
+                            text: ctl.setupShown ? qsTr("Show key") : qsTr("Show setup code")
+                            onClicked: ctl.toggleSetupShown()
                         }
                         TextButton {
-                            visible: ctl.setupCode !== ""
-                            text: qsTr("Copy setup code")
-                            onClicked: page.app.copyText(ctl.setupCode)
+                            text: ctl.setupShown ? qsTr("Copy setup code") : qsTr("Copy key")
+                            onClicked: page.app.copyText(ctl.setupShown ? ctl.setupCode : ctl.keyText())
                         }
                         TextButton {
                             primary: true
@@ -305,17 +304,18 @@ ScrollView {
                             onClicked: ctl.toggleKeyShown()
                         }
                         TextButton {
-                            text: qsTr("Copy key")
-                            onClicked: page.app.copyText(ctl.keyText())
-                        }
-                        TextButton {
                             visible: ctl.setupCode !== ""
-                            text: qsTr("Copy setup code")
-                            onClicked: page.app.copyText(ctl.setupCode)
+                            text: ctl.setupShown ? qsTr("Hide setup code") : qsTr("Show setup code")
+                            onClicked: ctl.toggleSetupShown()
+                        }
+                        // copies what is shown, so nothing is copied unseen
+                        TextButton {
+                            visible: ctl.keyShown || ctl.setupShown
+                            text: ctl.setupShown ? qsTr("Copy setup code") : qsTr("Copy key")
+                            onClicked: page.app.copyText(ctl.setupShown ? ctl.setupCode : ctl.keyText())
                         }
                     }
                     Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
                         visible: ctl.keyShown
                         implicitWidth: keyBlockReady.implicitWidth + Theme.large * 2
                         implicitHeight: keyBlockReady.implicitHeight + Theme.large * 2
@@ -336,15 +336,13 @@ ScrollView {
                         }
                     }
                     QrImage {
-                        Layout.alignment: Qt.AlignHCenter
-                        visible: ctl.keyShown
-                        text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                        visible: ctl.setupShown
+                        text: ctl.setupCode
                     }
                     Label {
                         Layout.fillWidth: true
-                        visible: ctl.keyShown && ctl.setupCode !== ""
+                        visible: ctl.setupShown
                         wrapMode: Text.Wrap
-                        horizontalAlignment: Text.AlignHCenter
                         opacity: 0.7
                         text: qsTr("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                     }

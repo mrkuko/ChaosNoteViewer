@@ -189,15 +189,17 @@ Item {
     property int keyRun: 0             // identifies the running key task, a stale one is ignored
     property string keyError: ""
     property string keyValue: ""       // the key as shown to the user, "" until needed
-    // What the QR code next to the key carries: the Firebase project and the key at once, so another device is set
-    // up by one scan (SetupCode.js). Never the sign-in.
+    // What the setup QR code carries: the Firebase project and the key at once, so another device is set up by one
+    // scan (SetupCode.js). Never the sign-in.
     readonly property string setupCode: {
         keyValue                           // read again when the key is shown, replaced or reset
         if (!configured || (keyPhase !== "ready" && keyPhase !== "save"))
             return ""
         return SetupCode.make(projectId, apiKey, KeyFlow.keyText())
     }
+    // Settings shows either the key as text or the setup code as a QR code, never both at once.
     property bool keyShown: false
+    property bool setupShown: false
     property bool resetOpen: false
     // Notes this device had synced that are gone from the server (deleted on another device).
     property var missingIds: ({})
@@ -549,6 +551,7 @@ Item {
         keyError = ""
         keyValue = ""
         keyShown = false
+        setupShown = false
         resetOpen = false
         missingIds = ({})
         lastReconcile = 0
@@ -688,12 +691,24 @@ Item {
         keyPhase = "ready"
         keyValue = ""
         keyShown = false
+        setupShown = false
         syncNow()
     }
 
     function toggleKeyShown() {
         keyShown = !keyShown
         keyValue = keyShown ? KeyFlow.keyBlock() : ""
+        if (keyShown)
+            setupShown = false
+    }
+
+    // In the "save" step the key stays loaded (it is shown whenever the QR code is not).
+    function toggleSetupShown() {
+        setupShown = !setupShown
+        if (setupShown && keyPhase === "ready") {
+            keyShown = false
+            keyValue = ""
+        }
     }
 
     // Lost key: wipes the cloud copy, makes a new key, uploads this device's notes again (after the "save" step).
@@ -711,6 +726,7 @@ Item {
             }
             keyMismatch = false
             keyShown = false
+            setupShown = false
             keyPhase = "save"
             keyValue = KeyFlow.keyBlock()
             refresh()

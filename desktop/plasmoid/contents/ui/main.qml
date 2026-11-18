@@ -647,8 +647,8 @@ PlasmoidItem {
                             }
                         }
 
-                        // Settings; real options arrive with the features they control. Scrolls: the key with its
-                        // QR code is taller than the popup.
+                        // Settings. Real options arrive with the features they control. Scrolls: the setup QR code
+                        // is taller than the popup.
                         PlasmaComponents3.ScrollView {
                         id: settingsScroll
                         contentWidth: availableWidth
@@ -840,7 +840,7 @@ PlasmoidItem {
                                         }
                                         // four fixed lines, never re-wrapped by the width of the window
                                         Rectangle {
-                                            Layout.alignment: Qt.AlignHCenter
+                                            visible: !ctl.setupShown
                                             implicitWidth: keyBlockSave.implicitWidth + Kirigami.Units.largeSpacing * 2
                                             implicitHeight: keyBlockSave.implicitHeight + Kirigami.Units.largeSpacing * 2
                                             radius: Kirigami.Units.cornerRadius
@@ -861,27 +861,26 @@ PlasmoidItem {
                                         }
                                         // for the phone's camera: the Firebase project and the key at once (SetupCode.js)
                                         QrImage {
-                                            Layout.alignment: Qt.AlignHCenter
+                                            visible: ctl.setupShown
                                             implicitWidth: Kirigami.Units.gridUnit * 12
-                                            text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                                            text: ctl.setupCode
                                         }
                                         PlasmaComponents3.Label {
                                             Layout.fillWidth: true
-                                            visible: ctl.setupCode !== ""
+                                            visible: ctl.setupShown
                                             wrapMode: Text.Wrap
-                                            horizontalAlignment: Text.AlignHCenter
                                             opacity: 0.7
                                             text: i18n("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                                         }
                                         RowLayout {
                                             TextButton {
-                                                text: i18n("Copy key")
-                                                onClicked: root.copyText(ctl.keyText())
+                                                visible: ctl.setupCode !== ""
+                                                text: ctl.setupShown ? i18n("Show key") : i18n("Show setup code")
+                                                onClicked: ctl.toggleSetupShown()
                                             }
                                             TextButton {
-                                                visible: ctl.setupCode !== ""
-                                                text: i18n("Copy setup code")
-                                                onClicked: root.copyText(ctl.setupCode)
+                                                text: ctl.setupShown ? i18n("Copy setup code") : i18n("Copy key")
+                                                onClicked: root.copyText(ctl.setupShown ? ctl.setupCode : ctl.keyText())
                                             }
                                             TextButton {
                                                 primary: true
@@ -934,17 +933,18 @@ PlasmoidItem {
                                                 onClicked: ctl.toggleKeyShown()
                                             }
                                             TextButton {
-                                                text: i18n("Copy key")
-                                                onClicked: root.copyText(ctl.keyText())
-                                            }
-                                            TextButton {
                                                 visible: ctl.setupCode !== ""
-                                                text: i18n("Copy setup code")
-                                                onClicked: root.copyText(ctl.setupCode)
+                                                text: ctl.setupShown ? i18n("Hide setup code") : i18n("Show setup code")
+                                                onClicked: ctl.toggleSetupShown()
+                                            }
+                                            // copies what is shown, so nothing is copied unseen
+                                            TextButton {
+                                                visible: ctl.keyShown || ctl.setupShown
+                                                text: ctl.setupShown ? i18n("Copy setup code") : i18n("Copy key")
+                                                onClicked: root.copyText(ctl.setupShown ? ctl.setupCode : ctl.keyText())
                                             }
                                         }
                                         Rectangle {
-                                            Layout.alignment: Qt.AlignHCenter
                                             visible: ctl.keyShown
                                             implicitWidth: keyBlockReady.implicitWidth + Kirigami.Units.largeSpacing * 2
                                             implicitHeight: keyBlockReady.implicitHeight + Kirigami.Units.largeSpacing * 2
@@ -965,16 +965,14 @@ PlasmoidItem {
                                             }
                                         }
                                         QrImage {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            visible: ctl.keyShown
+                                            visible: ctl.setupShown
                                             implicitWidth: Kirigami.Units.gridUnit * 12
-                                            text: ctl.setupCode !== "" ? ctl.setupCode : ctl.keyValue.replace(/\n/g, "-")
+                                            text: ctl.setupCode
                                         }
                                         PlasmaComponents3.Label {
                                             Layout.fillWidth: true
-                                            visible: ctl.keyShown && ctl.setupCode !== ""
+                                            visible: ctl.setupShown
                                             wrapMode: Text.Wrap
-                                            horizontalAlignment: Text.AlignHCenter
                                             opacity: 0.7
                                             text: i18n("Scan it with the phone app to set it up at once: the Firebase project and this key. You still sign in there with your password.")
                                         }
