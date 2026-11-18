@@ -4,6 +4,7 @@
 Used by install.sh (Plasma widget) and by CMake (tray app), so both builds get the same files.
 Plain Python, runs the same on Linux and Windows."""
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -91,7 +92,9 @@ def generate_firebase_config(local, rc, fb, out):
 
 if __name__ == "__main__":
     generate_migrations(HERE / "../core/storage/migrations", HERE / "shared/Migrations.js")
-    generate_firebase_config(HERE / "firebase.local.json",
+    # a release build must never take the author's own key: CHAOS_NO_LOCAL_CONFIG=1 ignores firebase.local.json
+    local = HERE / ("firebase.none.json" if os.environ.get("CHAOS_NO_LOCAL_CONFIG") else "firebase.local.json")
+    generate_firebase_config(local,
                              HERE / "../core/firebase/.firebaserc",
                              HERE / "../core/firebase/firebase.json",
                              HERE / "shared/FirebaseConfig.js")

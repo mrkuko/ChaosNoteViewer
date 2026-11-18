@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Chaos Note Viewer
+Comment=Notes with deadlines, in the tray
+Exec=chaosnoteviewer
+Icon=chaosnoteviewer
+Categories=Office;Utility;
+Terminal=false

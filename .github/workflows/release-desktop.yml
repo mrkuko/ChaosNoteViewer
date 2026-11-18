@@ -1,0 +1,196 @@
+name: Release Desktop
+run-name: Release ${{ github.ref_name }}
+
+# Push a tag like desktop-v0.1.0 (on the desktop branch) to build the Windows zip, the Linux AppImages and the Plasma
+# widget and attach them to a GitHub release.
+#   desktop-vX.Y.0   full release, created as a DRAFT: review the notes, then publish it
+#   desktop-vX.Y.Z   (Z > 0) nightly build: published at once as a pre-release
+# "Run workflow" (workflow_dispatch) on the desktop branch builds everything as artifacts and makes no release: use it to
+# try the pipeline. No secrets are needed: nothing is signed, and no Firebase key is built in (every user enters their own).
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: '6.8.3'
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      kind: ${{ steps.version.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that the tag is on the desktop branch
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if ! git branch -r --contains "$GITHUB_SHA" | grep -q 'origin/desktop$'; then
+            echo "::error::$GITHUB_REF_NAME is not on the desktop branch, nothing was published."
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "version=0.0.0" >> "$GITHUB_OUTPUT"; echo "kind=test" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          ver=${GITHUB_REF_NAME#desktop-v}
+          if ! echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The tag must look like desktop-v1.2.3, not $GITHUB_REF_NAME."
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          if [ "${ver##*.}" = 0 ]; then echo "kind=full" >> "$GITHUB_OUTPUT"; else echo "kind=nightly" >> "$GITHUB_OUTPUT"; fi
+
+  # the Plasma widget: one installable file, the same as install.sh makes
+  plasmoid:
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the package
+        run: sh desktop/packaging/make-plasmoid.sh "${{ needs.meta.outputs.version }}" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plasmoid
+          path: dist/*.plasmoid
+
+  # the tray app for Linux as an AppImage (Qt libraries inside, runs on any distribution with glibc 2.35 or newer),
+  # for x86_64 and aarch64 (the ARM runners are free for public repositories)
+  linux:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,  runner: ubuntu-22.04,     qt_host: linux,       qt_arch: gcc_64,       qt_dir: gcc_64 }
+          - { arch: aarch64, runner: ubuntu-22.04-arm, qt_host: linux_arm64, qt_arch: linux_gcc_arm64, qt_dir: gcc_arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libfuse2 \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon0 libdbus-1-3 libfontconfig1
+
+      - name: Qt ${{ env.QT_VERSION }}
+        run: |
+          python3 -m pip install --quiet aqtinstall
+          python3 -m aqt install-qt ${{ matrix.qt_host }} desktop "$QT_VERSION" ${{ matrix.qt_arch }} -O "$RUNNER_TEMP/Qt"
+          echo "QT_ROOT=$RUNNER_TEMP/Qt/$QT_VERSION/${{ matrix.qt_dir }}" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          CHAOS_NO_LOCAL_CONFIG=1 cmake -S desktop -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT"
+          cmake --build build
+
+      - name: AppImage
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          QMAKE: ${{ env.QT_ROOT }}/bin/qmake
+          QML_SOURCES_PATHS: ${{ github.workspace }}/desktop/qml:${{ github.workspace }}/desktop/shared
+          EXTRA_QT_PLUGINS: sqldrivers;imageformats;iconengines
+          LD_LIBRARY_PATH: ${{ env.QT_ROOT }}/lib
+        run: |
+          base=https://github.com/linuxdeploy
+          curl -fsSL -o linuxdeploy "$base/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch }}.AppImage"
+          curl -fsSL -o linuxdeploy-plugin-qt "$base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${{ matrix.arch }}.AppImage"
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+          export APPIMAGE_EXTRACT_AND_RUN=1 PATH="$PWD:$PATH"
+          ./linuxdeploy --appdir AppDir -e build/chaosnoteviewer \
+            -d desktop/packaging/chaosnoteviewer.desktop -i desktop/packaging/chaosnoteviewer.png \
+            --plugin qt --output appimage
+          mkdir dist
+          mv Chaos_Note_Viewer*.AppImage "dist/ChaosNoteViewer-$VERSION-linux-${{ matrix.arch }}.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*.AppImage
+
+  # the tray app for Windows: the .exe and the Qt libraries it needs, as a zip
+  windows:
+    needs: meta
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qt ${{ env.QT_VERSION }}
+        run: |
+          python -m pip install --quiet aqtinstall
+          python -m aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 -O C:\Qt
+          if ($LASTEXITCODE -ne 0) { throw 'Qt download failed' }
+          "QT_ROOT=C:\Qt\$env:QT_VERSION\msvc2022_64" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * `
+                -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { Set-Item -Path "Env:$($Matches[1])" -Value $Matches[2] }
+          }
+          $env:CHAOS_NO_LOCAL_CONFIG = '1'
+          cmake -S desktop -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT"
+          if ($LASTEXITCODE -ne 0) { throw 'cmake configure failed' }
+          cmake --build build
+          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+
+      - name: Collect the Qt libraries and zip
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          New-Item -ItemType Directory dist-app | Out-Null
+          Copy-Item build\chaosnoteviewer.exe dist-app\
+          & "$env:QT_ROOT\bin\windeployqt.exe" --release --qmldir desktop\qml dist-app\chaosnoteviewer.exe
+          if ($LASTEXITCODE -ne 0) { throw 'windeployqt failed' }
+          Copy-Item LICENSE dist-app\
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path dist-app\* -DestinationPath "dist\ChaosNoteViewer-$env:VERSION-windows-x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.zip
+
+  release:
+    needs: [meta, plasmoid, linux, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums and release notes
+        run: |
+          cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
+          DIST=dist sh .github/scripts/release-notes-desktop.sh "$GITHUB_REF_NAME" > notes.md
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ needs.meta.outputs.kind }}" = full ]; then flag="--draft"; title="Chaos Note Viewer for desktop ${{ needs.meta.outputs.version }}"
+          else flag="--prerelease"; title="Chaos Note Viewer for desktop ${{ needs.meta.outputs.version }} (nightly)"; fi
+          gh release create "$GITHUB_REF_NAME" dist/* $flag --title "$title" --notes-file notes.md
