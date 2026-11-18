@@ -61,7 +61,7 @@ cat <<E2
 |---|---|---|
 | Windows 10/11 | \`$WIN\` | Unzip it anywhere and run \`chaosnoteviewer.exe\`. Windows may warn that the app is unsigned: More info, Run anyway. |
 | Linux, any distribution (x86_64) | \`$LIN\` | \`chmod +x $LIN && ./$LIN\`. It needs FUSE 2 (\`libfuse2\`), or run it with \`--appimage-extract-and-run\`. |
-| Linux, any distribution (ARM64) | \`$ARM\` | The same, for 64-bit ARM computers. |
+| Linux, any distribution (ARM64) | \`$ARM\` | The same, for 64-bit ARM computers (glibc 2.39 or newer, e.g. Ubuntu 24.04). |
 | KDE Plasma 6 widget | \`$PLA\` | \`kpackagetool6 -t Plasma/Applet -i $PLA\` (\`-u\` instead of \`-i\` to upgrade), then add it from Add Widgets. |
 
 Checksums are in \`SHA256SUMS\`. To sync, the apps ask for your own Firebase project on first start, see the
