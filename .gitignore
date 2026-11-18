@@ -3,3 +3,10 @@ garbage/*
 build/
 node_modules/
 *-debug.log
+
+# Ignore log files from aqtinstall
+desktop/aqtinstall.log
+
+# IDE files
+.vscode/
+
