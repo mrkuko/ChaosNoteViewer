@@ -52,7 +52,7 @@
   are encrypted on the device with ChaCha20-Poly1305 before they leave it. The key exists only on your devices: the
   cloud stores ciphertext and never the key.
 - **One scan to add a device.** A device that already syncs shows a QR code with the whole setup (your project and
-  the encryption key); the new phone scans it and you only sign in.
+  the encryption key). The new phone scans it and you only sign in.
 - **Sync that keeps up.** Changes go out a couple of seconds after you make them, the open app pulls every 30 seconds,
   and on Android a background job syncs about every 15 minutes and as soon as the network is back.
 
@@ -129,7 +129,7 @@ into the apps, and no notes ever pass through a server of the author. Firebase's
    [core/firebase/firestore.rules](core/firebase/firestore.rules) and press Publish. They let each account read and
    write only its own notes, and only with a verified email.
 4. **Project settings** → General: note the **Project ID** and the **Web API key**. (If the key field is empty, add a
-   Web app on the same page; its `firebaseConfig` snippet shows the key as `apiKey`.)
+   Web app on the same page. Its `firebaseConfig` snippet shows the key as `apiKey`.)
 
 **First device:** the apps ask for these two values on first start, or later in Settings (Firebase project). Pasting
 the whole `firebaseConfig` snippet into the key field works too. Then create an account, open the link in the
@@ -140,7 +140,7 @@ the encryption key (the [setup code](core/crypto/README.md#setup-code)). Scan it
 use Copy setup code and paste it on another computer, then sign in with the same email and password. The sign-in is
 never part of the code: whoever sees it still needs your password.
 
-The Web API key is not a secret in Firebase's sense (it identifies the project, it grants nothing); what protects your
+The Web API key is not a secret in Firebase's sense. It identifies the project and grants nothing. What protects your
 notes are the security rules, your password and the encryption key.
 
 ## How the encryption works
@@ -152,20 +152,63 @@ never the key itself. Lose every device and the key, and the notes in the cloud 
 
 The format is specified in [core/crypto/](core/crypto/), with test vectors every client is checked against.
 
-## Repository layout
+## How this repository works
 
-`main` holds what all clients share; each client is developed on its own branch, which gets `main` merged in
+The clients share one contract and nothing else: the database schema, the encryption format, the setup code and the
+Firestore rules. So the repository is split the same way. `main` holds the shared contract and this page. Each client
+lives on its own long-lived branch with its own release cycle, and gets every change of `main` merged in
 automatically.
+
+[![Cascade](https://github.com/mrkuko/ChaosNoteViewer/actions/workflows/cascade.yml/badge.svg)](../../actions/workflows/cascade.yml)
+[![Release Android](https://github.com/mrkuko/ChaosNoteViewer/actions/workflows/release-android.yml/badge.svg)](../../actions/workflows/release-android.yml)
+[![Release Desktop](https://github.com/mrkuko/ChaosNoteViewer/actions/workflows/release-desktop.yml/badge.svg)](../../actions/workflows/release-desktop.yml)
+
+```mermaid
+flowchart LR
+    main["main<br/>core/: schema, crypto,<br/>Firestore rules, assets"]
+    android["android<br/>Kotlin, Jetpack Compose"]
+    desktop["desktop<br/>Qt 6 tray app,<br/>Plasma 6 widget"]
+    ra["android-vX.Y.Z<br/>APK, AAB"]
+    rd["desktop-vX.Y.Z<br/>Windows zip, AppImages,<br/>.plasmoid"]
+    main -- "cascade<br/>(on every push)" --> android
+    main -- "cascade<br/>(on every push)" --> desktop
+    android -- "tag" --> ra
+    desktop -- "tag" --> rd
+```
+
+| Branch | What is on it | Code |
+|---|---|---|
+| `main` | the shared contract, the docs, this README | [core/](core/) |
+| `android` | the Android app, plus everything from `main` | [android/](../../tree/android/android) |
+| `desktop` | the tray app for Linux and Windows and the Plasma widget, plus everything from `main` | [desktop/](../../tree/desktop/desktop) |
+
+**The rules:**
+
+- **Changes flow one way:** `main` into the client branches, never back. A change to the shared contract is made on
+  `main` first, then each client adopts it on its branch.
+- **Cascade** ([`.github/workflows/cascade.yml`](.github/workflows/cascade.yml)): every push to `main` merges it into
+  `android` and `desktop`. A conflict inside the client's own folder is resolved in the client's favour (its README,
+  for example). A conflict anywhere else stops the merge and opens a pull request and an issue for a human.
+- **Releases are tags on the client's branch:** `android-vX.Y.Z` or `desktop-vX.Y.Z`. The release workflow lives on that
+  branch and refuses a tag from anywhere else. `X.Y.0` becomes a draft that is published by hand, `X.Y.Z` with Z > 0 a
+  pre-release. The notes are written from the commit messages, grouped by type
+  ([conventional commits](https://www.conventionalcommits.org/): `feat(scope): ...`, `fix: ...`).
+- **Every client is checked against the contract:** the encryption test vectors in [core/crypto/](core/crypto/), the
+  migrations in [core/storage/migrations/](core/storage/migrations/), the Firestore rules tests in
+  [core/firebase/](core/firebase/).
+
+What `main` itself holds:
 
 - [core/firebase/](core/firebase/): Firestore security rules, their tests and the emulator setup
 - [core/storage/migrations/](core/storage/migrations/): the local database schema
-- [core/crypto/](core/crypto/): the encryption format and test vectors
+- [core/crypto/](core/crypto/): the encryption format, test vectors and the setup code
 - [core/assets/](core/assets/): the logo and icons
 
 ## Contributing
 
 Bug reports and ideas are welcome in [issues](../../issues). For a pull request, open an issue first so we can agree
-on the change. Contributions are accepted under the project's license.
+on the change, then aim it at the right branch: `main` for the shared contract (`core/`) and the docs, `android` or
+`desktop` for a client. Contributions are accepted under the project's license.
 
 ## License
 
