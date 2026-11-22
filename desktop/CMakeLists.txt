@@ -29,10 +29,12 @@ set(SHARED_FILES
     shared/Crypto.js
     shared/FirebaseConfig.js
     shared/KeyFlow.js
+    shared/Markdown.js
     shared/Migrations.js
     shared/NoteStore.js
     shared/QrCode.js
     shared/SetupCode.js
+    shared/NoteBody.qml
     shared/QrImage.qml
     shared/Sync.js)
 foreach(f ${SHARED_FILES})

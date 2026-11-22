@@ -140,14 +140,15 @@ Rectangle {
 
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
 
-                // the whole description, line breaks kept
-                SelectableText {
+                // the whole description: text with links and Markdown images, line breaks kept
+                NoteBody {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.large
                     Layout.rightMargin: Theme.large
                     Layout.bottomMargin: Theme.large
-                    visible: text !== ""
-                    content: page.note ? Theme.linkify(page.note.description).replace(/\n/g, "<br>") : ""
+                    visible: !empty
+                    source: page.note ? page.note.description : ""
+                    linkify: Theme.linkify
                 }
                 // room for more content in the future
             }

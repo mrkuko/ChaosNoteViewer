@@ -1430,14 +1430,15 @@ PlasmoidItem {
 
                         Kirigami.Separator { Layout.fillWidth: true }
 
-                        // the whole description, line breaks kept
-                        SelectableText {
+                        // the whole description: text with links and Markdown images, line breaks kept
+                        NoteBody {
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.largeSpacing
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             Layout.bottomMargin: Kirigami.Units.largeSpacing
-                            visible: content !== ""
-                            content: detailOverlay.note ? root.linkify(detailOverlay.note.description).replace(/\n/g, "<br>") : ""
+                            visible: !empty
+                            source: detailOverlay.note ? detailOverlay.note.description : ""
+                            linkify: root.linkify
                         }
                         // room for more content in the future
                     }
