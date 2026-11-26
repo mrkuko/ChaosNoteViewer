@@ -84,7 +84,7 @@ ListView {
         opacity: 0.6
         text: ctl.notes.count === 0 ? qsTr("No notes yet.\nPress + to add one.")
             : ctl.filter === 3 ? qsTr("Nothing urgent.\nOpen notes that are overdue or due in the next %1 days show up here.").arg(ctl.importantDays)
-            : ctl.tagFilter.length > 0 ? qsTr("No note has all the chosen tags.")
+            : ctl.tagFilter.length > 0 ? ctl.tagInvert ? qsTr("Every note has one of the chosen tags.") : qsTr("No note has all the chosen tags.")
             : ctl.filter === 4 ? qsTr("No ideas yet.\nGive a note the tag %1 and it shows up here.").arg(ctl.ideaTag)
             : qsTr("Nothing here")
     }

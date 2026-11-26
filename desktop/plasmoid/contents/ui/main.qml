@@ -206,7 +206,7 @@ PlasmoidItem {
                             visible: !root.settingsOpen && !root.calendarOpen
                             iconName: "tag"
                             iconSize: Kirigami.Units.iconSizes.smallMedium
-                            tip: ctl.tagFilter.length > 0 ? i18n("Filtered by tags: %1", ctl.tagFilter.join(", ")) : i18n("Filter by tags")
+                            tip: ctl.tagFilter.length > 0 ? ctl.tagInvert ? i18n("Hiding tags: %1", ctl.tagFilter.join(", ")) : i18n("Filtered by tags: %1", ctl.tagFilter.join(", ")) : i18n("Filter by tags")
                             checked: root.tagBarOpen || ctl.tagFilter.length > 0
                             onClicked: root.tagBarOpen = !root.tagBarOpen
                         }
@@ -360,10 +360,13 @@ PlasmoidItem {
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
                         known: ctl.knownTags
                         selected: ctl.tagFilter
+                        invert: ctl.tagInvert
                         accent: Kirigami.Theme.highlightColor
+                        textColor: Kirigami.Theme.textColor
                         pointSize: Kirigami.Theme.smallFont.pointSize + 1
                         onToggled: tag => ctl.toggleTagFilter(tag)
                         onCleared: ctl.clearTagFilter()
+                        onInvertToggled: on => ctl.tagInvert = on
                     }
 
                     Kirigami.Separator { Layout.fillWidth: true }
@@ -448,7 +451,7 @@ PlasmoidItem {
                                 opacity: 0.6
                                 text: ctl.notes.count === 0 ? i18n("No notes yet.\nPress + to add one.")
                                     : ctl.filter === 3 ? i18n("Nothing urgent.\nOpen notes that are overdue or due in the next %1 days show up here.", ctl.importantDays)
-                                    : ctl.tagFilter.length > 0 ? i18n("No note has all the chosen tags.")
+                                    : ctl.tagFilter.length > 0 ? ctl.tagInvert ? i18n("Every note has one of the chosen tags.") : i18n("No note has all the chosen tags.")
                                     : ctl.filter === 4 ? i18n("No ideas yet.\nGive a note the tag %1 and it shows up here.", ctl.ideaTag)
                                     : i18n("Nothing here")
                             }

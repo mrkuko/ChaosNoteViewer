@@ -214,9 +214,12 @@ Item {
     ListModel { id: shownModel }
     property alias shown: shownModel
 
-    // Tags chosen in the tag filter: a note must have all of them, on top of the view it is in. Kept while
-    // the app runs, not saved. A tag that no note has any more is dropped from it (see collectTags).
+    // Tags chosen in the tag filter: a note must have all of them, on top of the view it is in. With tagInvert
+    // on it is the other way round: notes that have any of them are hidden. Kept while the app runs, not
+    // saved. A tag that no note has any more is dropped from it (see collectTags).
     property var tagFilter: []
+    property bool tagInvert: false
+    onTagInvertChanged: refresh()
 
     function toggleTagFilter(tag) {
         const low = tag.toLowerCase()
@@ -224,14 +227,18 @@ Item {
             ? tagFilter.filter(t => t.toLowerCase() !== low)
             : tagFilter.concat([tag])
     }
-    function clearTagFilter() { tagFilter = [] }
+    function clearTagFilter() {
+        tagFilter = []
+        tagInvert = false
+    }
     onTagFilterChanged: refresh()
 
     function matchesTags(n) {
         if (tagFilter.length === 0)
             return true
         const have = JSON.parse(n.tags).map(t => t.toLowerCase())
-        return tagFilter.every(t => have.indexOf(t.toLowerCase()) >= 0)
+        const has = t => have.indexOf(t.toLowerCase()) >= 0
+        return tagInvert ? !tagFilter.some(has) : tagFilter.every(has)
     }
 
     function matches(n) {

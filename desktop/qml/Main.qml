@@ -179,7 +179,7 @@ ApplicationWindow {
                         visible: !root.settingsOpen && !root.calendarOpen
                         iconName: "tag"
                         iconSize: Theme.iconMedium
-                        tip: ctl.tagFilter.length > 0 ? qsTr("Filtered by tags: %1").arg(ctl.tagFilter.join(", ")) : qsTr("Filter by tags")
+                        tip: ctl.tagFilter.length > 0 ? (ctl.tagInvert ? qsTr("Hiding tags: %1") : qsTr("Filtered by tags: %1")).arg(ctl.tagFilter.join(", ")) : qsTr("Filter by tags")
                         checked: root.tagBarOpen || ctl.tagFilter.length > 0
                         onClicked: root.tagBarOpen = !root.tagBarOpen
                     }
@@ -291,10 +291,13 @@ ApplicationWindow {
                     Layout.bottomMargin: Theme.small
                     known: ctl.knownTags
                     selected: ctl.tagFilter
+                    invert: ctl.tagInvert
                     accent: Theme.accent
+                    textColor: Theme.text
                     pointSize: Theme.smallFont + 1
                     onToggled: tag => ctl.toggleTagFilter(tag)
                     onCleared: ctl.clearTagFilter()
+                    onInvertToggled: on => ctl.tagInvert = on
                 }
 
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
