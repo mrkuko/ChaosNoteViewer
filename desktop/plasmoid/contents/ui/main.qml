@@ -146,6 +146,17 @@ PlasmoidItem {
                         }
                     }
 
+                    NavButton {
+                        iconName: "bulb"
+                        tip: i18n("Ideas: notes with the tag %1", ctl.ideaTag)
+                        checked: !root.settingsOpen && !root.calendarOpen && ctl.filter === 4
+                        onClicked: {
+                            root.settingsOpen = false
+                            root.calendarOpen = false
+                            ctl.filter = 4
+                        }
+                    }
+
                     Item { Layout.fillHeight: true }
 
                     NavButton {
@@ -177,7 +188,7 @@ PlasmoidItem {
                             elide: Text.ElideRight
                             text: root.settingsOpen ? i18n("Settings")
                                 : root.calendarOpen ? i18n("Calendar")
-                                : [i18n("Open notes"), i18n("Completed"), i18n("All notes"), i18n("Important")][ctl.filter]
+                                : [i18n("Open notes"), i18n("Completed"), i18n("All notes"), i18n("Important"), i18n("Ideas")][ctl.filter]
                         }
                         // on: starred notes come first, in front of the chosen order
                         NavButton {
@@ -412,6 +423,7 @@ PlasmoidItem {
                                 opacity: 0.6
                                 text: ctl.notes.count === 0 ? i18n("No notes yet.\nPress + to add one.")
                                     : ctl.filter === 3 ? i18n("Nothing urgent.\nOpen notes that are overdue or due in the next %1 days show up here.", ctl.importantDays)
+                                    : ctl.filter === 4 ? i18n("No ideas yet.\nGive a note the tag %1 and it shows up here.", ctl.ideaTag)
                                     : i18n("Nothing here")
                             }
 

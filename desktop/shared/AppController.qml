@@ -109,7 +109,8 @@ Item {
     }
 
     // Which notes the list shows: 0 = open (default), 1 = completed, 2 = all,
-    // 3 = important (open and overdue or due within IMPORTANT_DAYS days, today included).
+    // 3 = important (open and overdue or due within IMPORTANT_DAYS days, today included),
+    // 4 = ideas (every note with the tag "Idea", completed or not).
     property int filter: 0
     readonly property int importantDays: 3
     // Order of the list. sortField: 0 = your own order (drag to reorder), 1 = name, 2 = deadline,
@@ -214,6 +215,8 @@ Item {
     property alias shown: shownModel
 
     function matches(n) {
+        if (filter === 4)
+            return JSON.parse(n.tags).some(t => t.toLowerCase() === ideaTag.toLowerCase())
         if (filter === 1)
             return n.completed
         if (filter === 2)
@@ -258,8 +261,13 @@ Item {
     // bumped on every refresh(), so views of one note (the detail page) can follow its changes
     property int revision: 0
 
-    // Every tag some live note carries, sorted A-Z without case. There is no list of tags of its own:
-    // a tag exists while a note has it. Recounted on every refresh(), which follows every change.
+    // Tags that are always known, even when no note has them: they are in the pick list from the start and
+    // do not disappear with their last note. Nothing is put on a note by this. The Ideas view shows ideaTag.
+    readonly property string ideaTag: "Idea"
+    readonly property var defaultTags: [ideaTag]
+
+    // Every tag some live note carries plus the default tags, sorted A-Z without case. There is no list of
+    // tags of its own: a tag exists while a note has it. Recounted on every refresh(), which follows every change.
     property var knownTags: []
     readonly property int tagMaxLength: NoteStore.TAG_MAX
 
@@ -271,9 +279,12 @@ Item {
         return i < 0 ? [] : JSON.parse(notes.get(i).tags)
     }
 
-    // true when a note other than noteId has the tag (compared without case)
+    // true when the tag stays known after noteId lets go of it: another note has it (compared without
+    // case) or it is a default tag
     function tagUsedElsewhere(tag, noteId) {
         const low = tag.toLowerCase()
+        if (defaultTags.some(t => t.toLowerCase() === low))
+            return true
         for (let i = 0; i < notes.count; ++i) {
             const n = notes.get(i)
             if (n.noteId !== noteId && JSON.parse(n.tags).some(t => t.toLowerCase() === low))
@@ -285,6 +296,10 @@ Item {
     function collectTags() {
         const seen = {}
         const out = []
+        for (const t of defaultTags) {
+            seen[t.toLowerCase()] = true
+            out.push(t)
+        }
         for (let i = 0; i < notes.count; ++i) {
             for (const t of JSON.parse(notes.get(i).tags)) {
                 if (seen[t.toLowerCase()])

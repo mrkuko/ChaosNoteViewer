@@ -119,6 +119,17 @@ ApplicationWindow {
                     }
                 }
 
+                NavButton {
+                    iconName: "bulb"
+                    tip: qsTr("Ideas: notes with the tag %1").arg(ctl.ideaTag)
+                    checked: !root.settingsOpen && !root.calendarOpen && ctl.filter === 4
+                    onClicked: {
+                        root.settingsOpen = false
+                        root.calendarOpen = false
+                        ctl.filter = 4
+                    }
+                }
+
                 Item { Layout.fillHeight: true }
 
                 NavButton {
@@ -150,7 +161,7 @@ ApplicationWindow {
                         elide: Text.ElideRight
                         text: root.settingsOpen ? qsTr("Settings")
                             : root.calendarOpen ? qsTr("Calendar")
-                            : [qsTr("Open notes"), qsTr("Completed"), qsTr("All notes"), qsTr("Important")][ctl.filter]
+                            : [qsTr("Open notes"), qsTr("Completed"), qsTr("All notes"), qsTr("Important"), qsTr("Ideas")][ctl.filter]
                     }
                     // on: starred notes come first, in front of the chosen order
                     NavButton {
