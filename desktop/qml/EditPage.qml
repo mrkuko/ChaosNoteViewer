@@ -26,10 +26,11 @@ Rectangle {
         const title = titleField.text.trim()
         if (title === "")
             return
+        tagEditor.commitPending()
         if (editing)
-            ctl.updateNote(app.editNote.noteId, title, descField.text.trim(), due, starred)
+            ctl.updateNote(app.editNote.noteId, title, descField.text.trim(), due, starred, tagEditor.tags)
         else
-            ctl.addNote(title, descField.text.trim(), due, starred)
+            ctl.addNote(title, descField.text.trim(), due, starred, tagEditor.tags)
         close()
     }
 
@@ -38,6 +39,7 @@ Rectangle {
         descField.text = editing ? app.editNote.description : ""
         due = editing ? app.editNote.dueDate : app.newNoteDue
         starred = editing && ctl.isStarred(app.editNote.noteId)
+        tagEditor.reset(editing ? ctl.tagsOf(app.editNote.noteId) : [])
         calendar.showMonthOf(due)
         titleField.forceActiveFocus()
     }
@@ -124,6 +126,21 @@ Rectangle {
                             event.accepted = true
                         }
                     }
+                }
+
+                TagEditor {
+                    id: tagEditor
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.large
+                    Layout.rightMargin: Theme.large
+                    noteId: page.editing ? app.editNote.noteId : ""
+                    known: ctl.knownTags
+                    usedElsewhere: ctl.tagUsedElsewhere
+                    isValid: ctl.isValidTag
+                    maxLength: ctl.tagMaxLength
+                    accent: Theme.accent
+                    textColor: Theme.text
+                    pointSize: Theme.smallFont + 1
                 }
 
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }

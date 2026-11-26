@@ -8,6 +8,9 @@ shared/FirebaseConfig.js
 plasmoid/contents/ui/*.js
 plasmoid/contents/ui/AppController.qml
 plasmoid/contents/ui/NoteBody.qml
+plasmoid/contents/ui/TagChip.qml
+plasmoid/contents/ui/TagEditor.qml
+plasmoid/contents/ui/TagFlow.qml
 plasmoid/contents/ui/icons/
 firebase.local.json
 dist/

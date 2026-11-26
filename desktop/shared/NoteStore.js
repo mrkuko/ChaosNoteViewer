@@ -64,6 +64,8 @@ function _row(r) {
         description: r.description,
         completed: r.completed === 1,
         starred: r.starred === 1,
+        // a JSON string, not an array: a ListModel can't hold a list of strings
+        tags: JSON.stringify(parseTags(r.tags)),
         position: r.position,
         dueDate: r.due_date === null ? 0 : r.due_date,  // 0 = no deadline
         createdAt: r.created_at
@@ -92,7 +94,7 @@ function add(title, description, dueDate) {
         var pos = tx.executeSql("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM notes WHERE deleted_at IS NULL").rows.item(0).p
         tx.executeSql("INSERT INTO notes (id, title, description, completed, position, due_date, created_at, updated_at, dirty) "
             + "VALUES (?, COALESCE(?, ''), COALESCE(?, ''), 0, ?, ?, ?, ?, 1)", [id, title, description, pos, dueDate > 0 ? dueDate : null, now, now])
-        note = { noteId: id, title: title, description: description, completed: false, starred: false, position: pos, dueDate: dueDate, createdAt: now }
+        note = { noteId: id, title: title, description: description, completed: false, starred: false, tags: "[]", position: pos, dueDate: dueDate, createdAt: now }
     })
     return note
 }
@@ -119,6 +121,46 @@ function setStarred(noteId, starred) {
     db().transaction(function (tx) {
         tx.executeSql("UPDATE notes SET starred = ?, updated_at = ?, dirty = 1 WHERE id = ?",
             [starred ? 1 : 0, Date.now(), noteId])
+    })
+}
+
+// ---- Tags ----
+// A tag is 1 to 15 printable ASCII characters with no space at either end (core/storage/migrations/004_tags.sql).
+
+var TAG_MAX = 15
+
+function isValidTag(t) {
+    return typeof t === "string" && /^[!-~](?:[ -~]{0,13}[!-~])?$/.test(t)
+}
+
+// The valid tags of a list, each once (the first spelling wins when two differ only in case).
+function cleanTags(list) {
+    var out = [], seen = {}
+    if (!Array.isArray(list))
+        return out
+    for (var i = 0; i < list.length; ++i) {
+        var t = list[i]
+        if (!isValidTag(t) || seen[t.toLowerCase()])
+            continue
+        seen[t.toLowerCase()] = true
+        out.push(t)
+    }
+    return out
+}
+
+// the tags column (JSON text) as an array, [] when it is empty or broken
+function parseTags(text) {
+    try {
+        return cleanTags(JSON.parse(text))
+    } catch (e) {
+        return []
+    }
+}
+
+function setTags(noteId, tags) {
+    db().transaction(function (tx) {
+        tx.executeSql("UPDATE notes SET tags = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            [JSON.stringify(cleanTags(tags)), Date.now(), noteId])
     })
 }
 
@@ -245,9 +287,9 @@ function applyRemote(items, uid) {
             if (n) {
                 var rs = tx.executeSql("SELECT updated_at, dirty FROM notes WHERE id = ?", [it.id])
                 if (rs.rows.length === 0) {
-                    tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, starred, position, due_date, "
-                        + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, COALESCE(?, ''), COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, 0, ?)",
-                        [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, n.position, n.dueDate,
+                    tx.executeSql("INSERT INTO notes (id, author_id, title, description, completed, starred, tags, position, due_date, "
+                        + "created_at, updated_at, deleted_at, dirty, remote_updated_at) VALUES (?, ?, COALESCE(?, ''), COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                        [it.id, uid, n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, JSON.stringify(n.tags), n.position, n.dueDate,
                          n.createdAt, n.updatedAt, null, it.tsMs])
                     ++changed
                 } else if (rs.rows.item(0).updated_at >= n.updatedAt) {
@@ -255,9 +297,9 @@ function applyRemote(items, uid) {
                     if (rs.rows.item(0).dirty === 0)
                         tx.executeSql("UPDATE notes SET remote_updated_at = ? WHERE id = ?", [it.tsMs, it.id])
                 } else {
-                    tx.executeSql("UPDATE notes SET title = COALESCE(?, ''), description = COALESCE(?, ''), completed = ?, starred = ?, position = ?, due_date = ?, "
+                    tx.executeSql("UPDATE notes SET title = COALESCE(?, ''), description = COALESCE(?, ''), completed = ?, starred = ?, tags = ?, position = ?, due_date = ?, "
                         + "updated_at = ?, deleted_at = ?, dirty = 0, remote_updated_at = ? WHERE id = ?",
-                        [n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, n.position, n.dueDate,
+                        [n.title, n.description, n.completed ? 1 : 0, n.starred ? 1 : 0, JSON.stringify(n.tags), n.position, n.dueDate,
                          n.updatedAt, null, it.tsMs, it.id])
                     ++changed
                 }

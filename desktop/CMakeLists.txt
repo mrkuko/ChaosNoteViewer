@@ -36,6 +36,9 @@ set(SHARED_FILES
     shared/SetupCode.js
     shared/NoteBody.qml
     shared/QrImage.qml
+    shared/TagChip.qml
+    shared/TagEditor.qml
+    shared/TagFlow.qml
     shared/Sync.js)
 foreach(f ${SHARED_FILES})
     get_filename_component(name ${f} NAME)

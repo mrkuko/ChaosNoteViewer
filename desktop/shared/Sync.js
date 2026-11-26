@@ -72,6 +72,7 @@ function _encode(key, row) {
         description: row.description,
         completed: row.completed === 1,
         starred: row.starred === 1,
+        tags: NoteStore.parseTags(row.tags),
         position: row.position,
         dueDate: row.due_date,
         createdAt: row.created_at,
@@ -87,9 +88,12 @@ function _parse(json) {
                 || typeof n.position !== "number" || !isFinite(n.position)
                 || typeof n.createdAt !== "number" || typeof n.updatedAt !== "number"
                 || !(n.dueDate === null || (typeof n.dueDate === "number" && isFinite(n.dueDate)))
-                || !(n.starred === undefined || typeof n.starred === "boolean"))      // missing: an older client
+                || !(n.starred === undefined || typeof n.starred === "boolean")       // missing: an older client
+                || !(n.tags === undefined || (Array.isArray(n.tags)
+                     && n.tags.every(function (t) { return typeof t === "string" }))))
             return null
         n.starred = n.starred === true
+        n.tags = NoteStore.cleanTags(n.tags || [])   // a tag this version can't show is dropped
         return n
     } catch (e) {
         return null

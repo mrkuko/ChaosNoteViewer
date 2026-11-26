@@ -177,6 +177,16 @@ ListView {
                         pointSize: Theme.smallFont
                         opacity: 0.7
                     }
+                    // the first tags that fit on one line
+                    TagFlow {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 2
+                        visible: model.tags !== "[]"
+                        oneLine: true
+                        tags: JSON.parse(model.tags)
+                        accent: Theme.accent
+                        pointSize: Theme.smallFont - 1
+                    }
                     RowLayout {
                         visible: model.dueDate > 0
                         spacing: Theme.small

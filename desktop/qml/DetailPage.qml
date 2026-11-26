@@ -137,6 +137,16 @@ Rectangle {
                           + qsTr("Created %1").arg(new Date(page.note.createdAt).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                         : ""
                 }
+                // all the tags of the note
+                TagFlow {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.large
+                    Layout.rightMargin: Theme.large
+                    visible: page.note !== null && page.note.tags !== "[]"
+                    tags: page.note ? JSON.parse(page.note.tags) : []
+                    accent: Theme.accent
+                    pointSize: Theme.smallFont
+                }
 
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
 

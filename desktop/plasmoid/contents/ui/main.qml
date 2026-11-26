@@ -507,6 +507,16 @@ PlasmoidItem {
                                                 pointSize: Kirigami.Theme.smallFont.pointSize
                                                 opacity: 0.7
                                             }
+                                            // the first tags that fit on one line
+                                            TagFlow {
+                                                Layout.fillWidth: true
+                                                Layout.topMargin: 2
+                                                visible: model.tags !== "[]"
+                                                oneLine: true
+                                                tags: JSON.parse(model.tags)
+                                                accent: Kirigami.Theme.highlightColor
+                                                pointSize: Kirigami.Theme.smallFont.pointSize - 1
+                                            }
                                             RowLayout {
                                                 visible: model.dueDate > 0
                                                 spacing: Kirigami.Units.smallSpacing
@@ -1428,6 +1438,16 @@ PlasmoidItem {
                                   + i18n("Created %1", new Date(detailOverlay.note.createdAt).toLocaleDateString(Qt.locale(), Locale.LongFormat))
                                 : ""
                         }
+                        // all the tags of the note
+                        TagFlow {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            visible: detailOverlay.note !== null && detailOverlay.note.tags !== "[]"
+                            tags: detailOverlay.note ? JSON.parse(detailOverlay.note.tags) : []
+                            accent: Kirigami.Theme.highlightColor
+                            pointSize: Kirigami.Theme.smallFont.pointSize
+                        }
 
                         Kirigami.Separator { Layout.fillWidth: true }
 
@@ -1472,10 +1492,11 @@ PlasmoidItem {
                 const title = titleField.text.trim()
                 if (title === "")
                     return
+                tagEditor.commitPending()
                 if (editing)
-                    ctl.updateNote(root.editNote.noteId, title, descField.text.trim(), due, addOverlay.starred)
+                    ctl.updateNote(root.editNote.noteId, title, descField.text.trim(), due, addOverlay.starred, tagEditor.tags)
                 else
-                    ctl.addNote(title, descField.text.trim(), due, addOverlay.starred)
+                    ctl.addNote(title, descField.text.trim(), due, addOverlay.starred, tagEditor.tags)
                 close()
             }
 
@@ -1484,6 +1505,7 @@ PlasmoidItem {
                 descField.text = editing ? root.editNote.description : ""
                 due = editing ? root.editNote.dueDate : root.newNoteDue
                 starred = editing && ctl.isStarred(root.editNote.noteId)
+                tagEditor.reset(editing ? ctl.tagsOf(root.editNote.noteId) : [])
                 calendar.showMonthOf(due)
                 titleField.forceActiveFocus()
             }
@@ -1566,6 +1588,21 @@ PlasmoidItem {
                                     event.accepted = true
                                 }
                             }
+                        }
+
+                        TagEditor {
+                            id: tagEditor
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            noteId: addOverlay.editing ? root.editNote.noteId : ""
+                            known: ctl.knownTags
+                            usedElsewhere: ctl.tagUsedElsewhere
+                            isValid: ctl.isValidTag
+                            maxLength: ctl.tagMaxLength
+                            accent: Kirigami.Theme.highlightColor
+                            textColor: Kirigami.Theme.textColor
+                            pointSize: Kirigami.Theme.defaultFont.pointSize
                         }
 
                         Kirigami.Separator { Layout.fillWidth: true }

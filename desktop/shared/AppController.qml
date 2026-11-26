@@ -258,8 +258,48 @@ Item {
     // bumped on every refresh(), so views of one note (the detail page) can follow its changes
     property int revision: 0
 
+    // Every tag some live note carries, sorted A-Z without case. There is no list of tags of its own:
+    // a tag exists while a note has it. Recounted on every refresh(), which follows every change.
+    property var knownTags: []
+    readonly property int tagMaxLength: NoteStore.TAG_MAX
+
+    function isValidTag(t) { return NoteStore.isValidTag(t) }
+
+    // the tags of a note as an array
+    function tagsOf(noteId) {
+        const i = indexOfNote(noteId)
+        return i < 0 ? [] : JSON.parse(notes.get(i).tags)
+    }
+
+    // true when a note other than noteId has the tag (compared without case)
+    function tagUsedElsewhere(tag, noteId) {
+        const low = tag.toLowerCase()
+        for (let i = 0; i < notes.count; ++i) {
+            const n = notes.get(i)
+            if (n.noteId !== noteId && JSON.parse(n.tags).some(t => t.toLowerCase() === low))
+                return true
+        }
+        return false
+    }
+
+    function collectTags() {
+        const seen = {}
+        const out = []
+        for (let i = 0; i < notes.count; ++i) {
+            for (const t of JSON.parse(notes.get(i).tags)) {
+                if (seen[t.toLowerCase()])
+                    continue
+                seen[t.toLowerCase()] = true
+                out.push(t)
+            }
+        }
+        out.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+        knownTags = out
+    }
+
     function refresh() {
         ++revision
+        collectTags()
         const rows = []
         // in upcoming-then-overdue order the overdue notes are their own section (ListView.section)
         const split = sortField === upcomingSort && filter === 3
@@ -268,7 +308,7 @@ Item {
             const n = notes.get(i)
             if (matches(n))
                 rows.push({ noteId: n.noteId, title: n.title, description: n.description, completed: n.completed,
-                            starred: n.starred, dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
+                            starred: n.starred, tags: n.tags, dueDate: n.dueDate, position: n.position, createdAt: n.createdAt,
                             missing: missingIds[n.noteId] === true,
                             group: split && n.dueDate > 0 && n.dueDate < today ? "overdue" : "" })
         }
@@ -292,11 +332,15 @@ Item {
         return -1
     }
 
-    function addNote(title, description, dueDate, starred) {
+    function addNote(title, description, dueDate, starred, tags) {
         const note = NoteStore.add(title, description, dueDate)
         if (starred === true) {
             NoteStore.setStarred(note.noteId, true)
             note.starred = true
+        }
+        if (tags !== undefined && tags.length > 0) {
+            NoteStore.setTags(note.noteId, tags)
+            note.tags = JSON.stringify(NoteStore.cleanTags(tags))
         }
         notes.append(note)
         refresh()
@@ -308,15 +352,20 @@ Item {
         return i >= 0 && notes.get(i).starred === true
     }
 
-    // starred is optional: left out, the star stays as it is
-    function updateNote(noteId, title, description, dueDate, starred) {
+    // starred and tags are optional: left out, they stay as they are
+    function updateNote(noteId, title, description, dueDate, starred, tags) {
         NoteStore.update(noteId, title, description, dueDate)
         if (starred !== undefined && starred !== isStarred(noteId))
             NoteStore.setStarred(noteId, starred)
+        const tagsJson = tags === undefined ? "" : JSON.stringify(NoteStore.cleanTags(tags))
+        if (tags !== undefined && tagsJson !== JSON.stringify(tagsOf(noteId)))
+            NoteStore.setTags(noteId, tags)
         const i = indexOfNote(noteId)
         if (i >= 0) {
             if (starred !== undefined)
                 notes.setProperty(i, "starred", starred)
+            if (tags !== undefined)
+                notes.setProperty(i, "tags", tagsJson)
             notes.setProperty(i, "title", title)
             notes.setProperty(i, "description", description)
             notes.setProperty(i, "dueDate", dueDate)
