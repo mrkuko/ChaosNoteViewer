@@ -13,6 +13,8 @@ Rectangle {
     property bool removable: false
     // the whole chip is a button (clicked)
     property bool clickable: false
+    // chosen (in the tag filter): a stronger fill
+    property bool selected: false
 
     signal clicked()
     signal removeClicked()
@@ -20,8 +22,8 @@ Rectangle {
     implicitHeight: label.implicitHeight + 4
     implicitWidth: label.implicitWidth + 14 + (removable ? cross.implicitWidth + 4 : 0)
     radius: height / 2
-    color: Qt.alpha(accent, clickable && hover.hovered ? 0.32 : 0.16)
-    border.color: Qt.alpha(accent, 0.5)
+    color: Qt.alpha(accent, selected ? 0.55 : clickable && hover.hovered ? 0.32 : 0.16)
+    border.color: Qt.alpha(accent, selected ? 1.0 : 0.5)
     border.width: 1
 
     HoverHandler {

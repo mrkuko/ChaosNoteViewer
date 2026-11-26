@@ -18,6 +18,8 @@ PlasmoidItem {
     property bool addOpen: false
     // the calendar of deadlines is shown instead of the notes list
     property bool calendarOpen: false
+    // the tag filter (chips under the header) is open
+    property bool tagBarOpen: false
     // deadline a new note starts with (the day chosen in the calendar), 0 = none
     property double newNoteDue: 0
     // the note being edited in the same page as "New note"; null = not editing
@@ -199,6 +201,15 @@ PlasmoidItem {
                             checked: ctl.starredFirst
                             onClicked: ctl.setStarredFirst(!ctl.starredFirst)
                         }
+                        // choose tags to narrow the list: a note needs all the chosen ones
+                        NavButton {
+                            visible: !root.settingsOpen && !root.calendarOpen
+                            iconName: "tag"
+                            iconSize: Kirigami.Units.iconSizes.smallMedium
+                            tip: ctl.tagFilter.length > 0 ? i18n("Filtered by tags: %1", ctl.tagFilter.join(", ")) : i18n("Filter by tags")
+                            checked: root.tagBarOpen || ctl.tagFilter.length > 0
+                            onClicked: root.tagBarOpen = !root.tagBarOpen
+                        }
                         NavButton {
                             id: sortButton
                             visible: !root.settingsOpen && !root.calendarOpen
@@ -341,6 +352,20 @@ PlasmoidItem {
                         }
                     }
 
+                    TagFilterBar {
+                        visible: root.tagBarOpen && !root.settingsOpen && !root.calendarOpen
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        known: ctl.knownTags
+                        selected: ctl.tagFilter
+                        accent: Kirigami.Theme.highlightColor
+                        pointSize: Kirigami.Theme.smallFont.pointSize + 1
+                        onToggled: tag => ctl.toggleTagFilter(tag)
+                        onCleared: ctl.clearTagFilter()
+                    }
+
                     Kirigami.Separator { Layout.fillWidth: true }
 
                     StackLayout {
@@ -423,6 +448,7 @@ PlasmoidItem {
                                 opacity: 0.6
                                 text: ctl.notes.count === 0 ? i18n("No notes yet.\nPress + to add one.")
                                     : ctl.filter === 3 ? i18n("Nothing urgent.\nOpen notes that are overdue or due in the next %1 days show up here.", ctl.importantDays)
+                                    : ctl.tagFilter.length > 0 ? i18n("No note has all the chosen tags.")
                                     : ctl.filter === 4 ? i18n("No ideas yet.\nGive a note the tag %1 and it shows up here.", ctl.ideaTag)
                                     : i18n("Nothing here")
                             }

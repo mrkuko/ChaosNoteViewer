@@ -38,6 +38,7 @@ set(SHARED_FILES
     shared/QrImage.qml
     shared/TagChip.qml
     shared/TagEditor.qml
+    shared/TagFilterBar.qml
     shared/TagFlow.qml
     shared/Sync.js)
 foreach(f ${SHARED_FILES})

@@ -214,7 +214,31 @@ Item {
     ListModel { id: shownModel }
     property alias shown: shownModel
 
+    // Tags chosen in the tag filter: a note must have all of them, on top of the view it is in. Kept while
+    // the app runs, not saved. A tag that no note has any more is dropped from it (see collectTags).
+    property var tagFilter: []
+
+    function toggleTagFilter(tag) {
+        const low = tag.toLowerCase()
+        tagFilter = tagFilter.some(t => t.toLowerCase() === low)
+            ? tagFilter.filter(t => t.toLowerCase() !== low)
+            : tagFilter.concat([tag])
+    }
+    function clearTagFilter() { tagFilter = [] }
+    onTagFilterChanged: refresh()
+
+    function matchesTags(n) {
+        if (tagFilter.length === 0)
+            return true
+        const have = JSON.parse(n.tags).map(t => t.toLowerCase())
+        return tagFilter.every(t => have.indexOf(t.toLowerCase()) >= 0)
+    }
+
     function matches(n) {
+        return matchesView(n) && matchesTags(n)
+    }
+
+    function matchesView(n) {
         if (filter === 4)
             return JSON.parse(n.tags).some(t => t.toLowerCase() === ideaTag.toLowerCase())
         if (filter === 1)
@@ -310,6 +334,10 @@ Item {
         }
         out.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         knownTags = out
+        // a chosen tag that is no longer known (its last note lost it) leaves the filter
+        const alive = tagFilter.filter(t => seen[t.toLowerCase()])
+        if (alive.length !== tagFilter.length)
+            tagFilter = alive
     }
 
     function refresh() {

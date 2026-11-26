@@ -25,6 +25,8 @@ ApplicationWindow {
     property bool addOpen: false
     // the calendar of deadlines is shown instead of the notes list
     property bool calendarOpen: false
+    // the tag filter (chips under the header) is open
+    property bool tagBarOpen: false
     // deadline a new note starts with (the day chosen in the calendar), 0 = none
     property double newNoteDue: 0
     // the note being edited in the same page as "New note"; null = not editing
@@ -172,6 +174,15 @@ ApplicationWindow {
                         checked: ctl.starredFirst
                         onClicked: ctl.setStarredFirst(!ctl.starredFirst)
                     }
+                    // choose tags to narrow the list: a note needs all the chosen ones
+                    NavButton {
+                        visible: !root.settingsOpen && !root.calendarOpen
+                        iconName: "tag"
+                        iconSize: Theme.iconMedium
+                        tip: ctl.tagFilter.length > 0 ? qsTr("Filtered by tags: %1").arg(ctl.tagFilter.join(", ")) : qsTr("Filter by tags")
+                        checked: root.tagBarOpen || ctl.tagFilter.length > 0
+                        onClicked: root.tagBarOpen = !root.tagBarOpen
+                    }
                     NavButton {
                         id: sortButton
                         visible: !root.settingsOpen && !root.calendarOpen
@@ -270,6 +281,20 @@ ApplicationWindow {
                         font.pointSize: Theme.smallFont
                         onClicked: ctl.setSortField(0)
                     }
+                }
+
+                TagFilterBar {
+                    visible: root.tagBarOpen && !root.settingsOpen && !root.calendarOpen
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.large
+                    Layout.rightMargin: Theme.large
+                    Layout.bottomMargin: Theme.small
+                    known: ctl.knownTags
+                    selected: ctl.tagFilter
+                    accent: Theme.accent
+                    pointSize: Theme.smallFont + 1
+                    onToggled: tag => ctl.toggleTagFilter(tag)
+                    onCleared: ctl.clearTagFilter()
                 }
 
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
