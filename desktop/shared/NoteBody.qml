@@ -66,7 +66,8 @@ Item {
                     Component {
                         id: previewItem
                         Text {
-                            text: part.html
+                            // rich text ignores linkColor, so the links get the color through a font tag
+                            text: part.html.replace(/<a href="([^"]*)">([^<]*)<\/a>/g, '<a href="$1"><font color="' + body.linkColor + '">$2</font></a>')
                             textFormat: Text.RichText
                             wrapMode: Text.Wrap
                             color: body.textColor

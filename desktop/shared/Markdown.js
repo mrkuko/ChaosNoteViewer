@@ -67,7 +67,7 @@ function toHtml(text, linkify, borderColor) {
     var lines = String(text === undefined || text === null ? "" : text).split(/\r?\n/)
     var out = []
     var para = []
-    var lists = []   // open lists: { indent, tag }
+    var lists = []   // open list levels: { indent }
 
     function flushPara() {
         if (para.length > 0) out.push("<p style=\"margin:0\">" + para.join("<br>") + "</p>")
@@ -75,7 +75,7 @@ function toHtml(text, linkify, borderColor) {
     }
     function closeLists(toIndent) {
         while (lists.length > 0 && (toIndent === undefined || toIndent < lists[lists.length - 1].indent)) {
-            out.push("</" + lists.pop().tag + ">")
+            lists.pop()
         }
     }
     function indentOf(ws) { return ws.replace(/\t/g, "    ").length }
@@ -130,18 +130,17 @@ function toHtml(text, linkify, borderColor) {
         if ((m = _isItem.exec(line)) !== null) {
             flushPara()
             var indent = indentOf(m[1])
-            var tag = /^\d/.test(m[2]) ? "ol" : "ul"
+            var ordered = /^\d/.test(m[2])
             closeLists(indent)
-            if (lists.length > 0 && lists[lists.length - 1].indent === indent && lists[lists.length - 1].tag !== tag) closeLists(indent - 1)
-            if (lists.length === 0 || indent > lists[lists.length - 1].indent) {
-                var start = tag === "ol" && parseInt(m[2], 10) !== 1 ? " start=\"" + parseInt(m[2], 10) + "\"" : ""
-                out.push("<" + tag + start + " style=\"margin-top:2px;margin-bottom:2px\">")
-                lists.push({ indent: indent, tag: tag })
-            }
+            if (lists.length === 0 || indent > lists[lists.length - 1].indent) lists.push({ indent: indent })
             var item = m[3]
             var task = /^\[([ xX])\][ \t]+/.exec(item)
             if (task) item = (task[1] === " " ? "\u2610 " : "\u2611 ") + item.substring(task[0].length)
-            out.push("<li>" + _inline(item, linkify) + "</li>")
+            // Qt indents its own lists by 40 px, too much for a small card. So an item is a paragraph with the
+            // marker in front and a hanging indent, which also keeps wrapped lines under the text.
+            var depth = lists.length - 1
+            var marker = ordered ? m[2] : (depth === 0 ? "\u2022" : "\u25E6")
+            out.push("<p style=\"margin:1px 0 1px " + (14 + depth * 16) + "px;text-indent:-14px\">" + marker + "&nbsp;" + _inline(item, linkify) + "</p>")
             continue
         }
 
