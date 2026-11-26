@@ -1459,6 +1459,8 @@ PlasmoidItem {
             property double due: 0
 
             readonly property bool editing: root.editNote !== null
+            // the star of the note, saved with Save/Add
+            property bool starred: false
 
             function close() {
                 root.addOpen = false
@@ -1471,9 +1473,9 @@ PlasmoidItem {
                 if (title === "")
                     return
                 if (editing)
-                    ctl.updateNote(root.editNote.noteId, title, descField.text.trim(), due)
+                    ctl.updateNote(root.editNote.noteId, title, descField.text.trim(), due, addOverlay.starred)
                 else
-                    ctl.addNote(title, descField.text.trim(), due)
+                    ctl.addNote(title, descField.text.trim(), due, addOverlay.starred)
                 close()
             }
 
@@ -1481,6 +1483,7 @@ PlasmoidItem {
                 titleField.text = editing ? root.editNote.title : ""
                 descField.text = editing ? root.editNote.description : ""
                 due = editing ? root.editNote.dueDate : root.newNoteDue
+                starred = editing && ctl.isStarred(root.editNote.noteId)
                 calendar.showMonthOf(due)
                 titleField.forceActiveFocus()
             }
@@ -1510,6 +1513,13 @@ PlasmoidItem {
                         Layout.leftMargin: Kirigami.Units.smallSpacing
                         level: 3
                         text: addOverlay.editing ? i18n("Edit note") : i18n("New note")
+                    }
+                    NavButton {
+                        iconName: addOverlay.starred ? "star-filled" : "star"
+                        iconSize: Kirigami.Units.iconSizes.smallMedium
+                        wide: false
+                        tip: addOverlay.starred ? i18n("Remove the star") : i18n("Mark as important (star)")
+                        onClicked: addOverlay.starred = !addOverlay.starred
                     }
                     TextButton {
                         primary: true

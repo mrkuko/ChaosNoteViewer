@@ -292,16 +292,31 @@ Item {
         return -1
     }
 
-    function addNote(title, description, dueDate) {
-        notes.append(NoteStore.add(title, description, dueDate))
+    function addNote(title, description, dueDate, starred) {
+        const note = NoteStore.add(title, description, dueDate)
+        if (starred === true) {
+            NoteStore.setStarred(note.noteId, true)
+            note.starred = true
+        }
+        notes.append(note)
         refresh()
         scheduleSync()
     }
 
-    function updateNote(noteId, title, description, dueDate) {
+    function isStarred(noteId) {
+        const i = indexOfNote(noteId)
+        return i >= 0 && notes.get(i).starred === true
+    }
+
+    // starred is optional: left out, the star stays as it is
+    function updateNote(noteId, title, description, dueDate, starred) {
         NoteStore.update(noteId, title, description, dueDate)
+        if (starred !== undefined && starred !== isStarred(noteId))
+            NoteStore.setStarred(noteId, starred)
         const i = indexOfNote(noteId)
         if (i >= 0) {
+            if (starred !== undefined)
+                notes.setProperty(i, "starred", starred)
             notes.setProperty(i, "title", title)
             notes.setProperty(i, "description", description)
             notes.setProperty(i, "dueDate", dueDate)

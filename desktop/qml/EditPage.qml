@@ -13,6 +13,8 @@ Rectangle {
     visible: app.addOpen || app.editNote !== null
     color: Theme.bg
     property double due: 0
+    // the star of the note, saved with Save/Add
+    property bool starred: false
 
     function close() {
         app.addOpen = false
@@ -25,9 +27,9 @@ Rectangle {
         if (title === "")
             return
         if (editing)
-            ctl.updateNote(app.editNote.noteId, title, descField.text.trim(), due)
+            ctl.updateNote(app.editNote.noteId, title, descField.text.trim(), due, starred)
         else
-            ctl.addNote(title, descField.text.trim(), due)
+            ctl.addNote(title, descField.text.trim(), due, starred)
         close()
     }
 
@@ -35,6 +37,7 @@ Rectangle {
         titleField.text = editing ? app.editNote.title : ""
         descField.text = editing ? app.editNote.description : ""
         due = editing ? app.editNote.dueDate : app.newNoteDue
+        starred = editing && ctl.isStarred(app.editNote.noteId)
         calendar.showMonthOf(due)
         titleField.forceActiveFocus()
     }
@@ -67,6 +70,13 @@ Rectangle {
                 font.pointSize: 13
                 font.bold: true
                 text: page.editing ? qsTr("Edit note") : qsTr("New note")
+            }
+            NavButton {
+                iconName: page.starred ? "star-filled" : "star"
+                iconSize: Theme.iconMedium
+                wide: false
+                tip: page.starred ? qsTr("Remove the star") : qsTr("Mark as important (star)")
+                onClicked: page.starred = !page.starred
             }
             TextButton {
                 primary: true
