@@ -27,6 +27,9 @@ ApplicationWindow {
     property bool calendarOpen: false
     // the tag filter (chips under the header) is open
     property bool tagBarOpen: false
+    // The row is shown while it is open or while tags are chosen, so a filter is never on without being seen.
+    // Closing it turns the filter off.
+    readonly property bool tagBarShown: tagBarOpen || ctl.tagFilter.length > 0
     // deadline a new note starts with (the day chosen in the calendar), 0 = none
     property double newNoteDue: 0
     // the note being edited in the same page as "New note"; null = not editing
@@ -179,9 +182,16 @@ ApplicationWindow {
                         visible: !root.settingsOpen && !root.calendarOpen
                         iconName: "tag"
                         iconSize: Theme.iconMedium
-                        tip: ctl.tagFilter.length > 0 ? (ctl.tagInvert ? qsTr("Hiding tags: %1") : qsTr("Filtered by tags: %1")).arg(ctl.tagFilter.join(", ")) : qsTr("Filter by tags")
-                        checked: root.tagBarOpen || ctl.tagFilter.length > 0
-                        onClicked: root.tagBarOpen = !root.tagBarOpen
+                        tip: ctl.tagFilter.length > 0 ? (ctl.tagInvert ? qsTr("Hiding tags: %1. Click to turn the filter off") : qsTr("Filtered by tags: %1. Click to turn the filter off")).arg(ctl.tagFilter.join(", ")) : qsTr("Filter by tags")
+                        checked: root.tagBarShown
+                        onClicked: {
+                            if (root.tagBarShown) {
+                                root.tagBarOpen = false
+                                ctl.clearTagFilter()
+                            } else {
+                                root.tagBarOpen = true
+                            }
+                        }
                     }
                     NavButton {
                         id: sortButton
@@ -284,7 +294,7 @@ ApplicationWindow {
                 }
 
                 TagFilterBar {
-                    visible: root.tagBarOpen && !root.settingsOpen && !root.calendarOpen
+                    visible: root.tagBarShown && !root.settingsOpen && !root.calendarOpen
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.large
                     Layout.rightMargin: Theme.large
