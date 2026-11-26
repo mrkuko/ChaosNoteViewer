@@ -493,18 +493,19 @@ PlasmoidItem {
                                                     elide: Text.ElideRight
                                                 }
                                             }
-                                            PlasmaComponents3.Label {
+                                            // the description as Markdown, cut after a few lines (the whole text is in the detail)
+                                            NoteBody {
                                                 Layout.fillWidth: true
-                                                visible: text !== ""
-                                                text: root.linkify(model.description)
-                                                textFormat: Text.StyledText
+                                                visible: !empty
+                                                preview: true
+                                                maxLines: 4
+                                                source: model.description
+                                                linkify: root.linkify
+                                                textColor: Kirigami.Theme.textColor
                                                 linkColor: Kirigami.Theme.linkColor
-                                                onLinkActivated: link => Qt.openUrlExternally(link)
-                                                HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                                                maximumLineCount: 1
-                                                elide: Text.ElideRight
+                                                lineColor: Qt.alpha(Kirigami.Theme.textColor, 0.4)
+                                                pointSize: Kirigami.Theme.smallFont.pointSize
                                                 opacity: 0.7
-                                                font.pointSize: Kirigami.Theme.smallFont.pointSize
                                             }
                                             RowLayout {
                                                 visible: model.dueDate > 0
@@ -1439,6 +1440,7 @@ PlasmoidItem {
                             visible: !empty
                             source: detailOverlay.note ? detailOverlay.note.description : ""
                             linkify: root.linkify
+                            lineColor: Qt.alpha(Kirigami.Theme.textColor, 0.4)
                         }
                         // room for more content in the future
                     }

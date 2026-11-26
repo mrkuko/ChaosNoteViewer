@@ -163,18 +163,19 @@ ListView {
                             elide: Text.ElideRight
                         }
                     }
-                    Label {
+                    // the description as Markdown, cut after a few lines (the whole text is in the detail)
+                    NoteBody {
                         Layout.fillWidth: true
-                        visible: text !== ""
-                        text: Theme.linkify(model.description)
-                        textFormat: Text.StyledText
+                        visible: !empty
+                        preview: true
+                        maxLines: 4
+                        source: model.description
+                        linkify: Theme.linkify
+                        textColor: Theme.text
                         linkColor: Theme.link
-                        onLinkActivated: link => Qt.openUrlExternally(link)
-                        HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                        maximumLineCount: 1
-                        elide: Text.ElideRight
+                        lineColor: Qt.alpha(Theme.text, 0.4)
+                        pointSize: Theme.smallFont
                         opacity: 0.7
-                        font.pointSize: Theme.smallFont
                     }
                     RowLayout {
                         visible: model.dueDate > 0

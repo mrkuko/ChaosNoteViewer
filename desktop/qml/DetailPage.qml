@@ -149,6 +149,7 @@ Rectangle {
                     visible: !empty
                     source: page.note ? page.note.description : ""
                     linkify: Theme.linkify
+                    lineColor: Qt.alpha(Theme.text, 0.4)
                 }
                 // room for more content in the future
             }
